@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import OrderedDict
 from collections.abc import Callable
 from pathlib import Path
 from typing import Final, Protocol
@@ -48,12 +49,14 @@ class SnapshotReader(Protocol):
 
 
 class CachingSnapshotReader:
-    """In-memory cache around any ``SnapshotReader``.
+    """In-memory LRU cache around any ``SnapshotReader``.
 
-    Snapshot files are large (~5MB players.json + per-week stats) and
-    fully immutable until the loader overwrites them. Re-parsing them
-    per request — let alone per slot, per prefetched week — is a
-    measurable bottleneck under fan-out load.
+    Snapshot files are large (~5MB players.json + per-week stats, ~50-90MB
+    per season as parsed Python objects) and fully immutable until the
+    loader overwrites them. Re-parsing them per request — let alone per
+    slot, per prefetched week — is a measurable bottleneck under fan-out
+    load. Capped at ``max_seasons`` so we don't OOM after a user pages
+    through history.
 
     Keyed by season, invalidated by an opaque ``version_for(season)``
     token. Local backends use the manifest mtime; the GCS backend uses
@@ -64,10 +67,13 @@ class CachingSnapshotReader:
         self,
         inner: SnapshotReader,
         version_for: Callable[[int], str | None],
+        *,
+        max_seasons: int = 5,
     ) -> None:
         self._inner = inner
         self._version_for = version_for
-        self._cache: dict[int, tuple[str, SnapshotData]] = {}
+        self._max_seasons = max_seasons
+        self._cache: OrderedDict[int, tuple[str, SnapshotData]] = OrderedDict()
 
     def load(self, season: int) -> SnapshotData:
         token = self._version_for(season)
@@ -76,11 +82,15 @@ class CachingSnapshotReader:
             return self._inner.load(season)
         cached = self._cache.get(season)
         if cached is not None and cached[0] == token:
+            self._cache.move_to_end(season)
             return cached[1]
         data = self._inner.load(season)
         # Atomic dict assignment under GIL — concurrent loads may race
         # and double-parse, but the result is correct.
         self._cache[season] = (token, data)
+        self._cache.move_to_end(season)
+        while len(self._cache) > self._max_seasons:
+            self._cache.popitem(last=False)
         return data
 
 
