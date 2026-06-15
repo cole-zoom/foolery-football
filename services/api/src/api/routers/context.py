@@ -11,8 +11,8 @@ from collections import Counter
 from decision_engine.core.eligibility import NON_SELECTABLE_SLOTS
 from decision_engine.core.league_fetch import fetch_league_context, resolve_state
 from decision_engine.types import LeagueContext, Player
-from ffdm_app.types import LiveState
 from fastapi import APIRouter, Query
+from ffdm_app.types import LiveState
 
 from api.deps import (
     HttpClientDep,

@@ -14,9 +14,9 @@ from decision_engine.clients.snapshot_reader import (
 from decision_engine.core.eligibility import UnsupportedSlotError
 from decision_engine.core.league_fetch import UserInputError
 from decision_engine.providers.sleeper import SchemaError
-from ffdm_app.season_cache import FutureSeasonError
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from ffdm_app.season_cache import FutureSeasonError
 
 
 def _json(status: int, message: str) -> JSONResponse:

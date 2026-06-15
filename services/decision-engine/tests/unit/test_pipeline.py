@@ -246,6 +246,56 @@ def test_limit_caps_result_length() -> None:
     assert len(result.candidates) == 1
 
 
+def test_exclude_player_ids_drops_them_from_candidates() -> None:
+    """``exclude_player_ids`` keeps players out of the candidate list.
+
+    The /decisions endpoint uses this to prevent the same player from
+    being recommended into multiple slots (WR1, WR2, FLEX). Regression
+    test for the duplicate-lineup-slot bug.
+    """
+
+    snap = _snapshot_with_history()
+    http = FakeHttp(league_routes(user_roster_players=("p1", "p2")))
+    reader = FakeSnapshotReader(snap)
+
+    excluded = pipeline.run(
+        http=http,
+        snapshot_reader=reader,
+        request=_make_request(
+            slot="FLEX",
+            pool="roster",
+            exclude_player_ids=frozenset({"p1"}),
+        ),
+    )
+    pids = {c.player.player_id for c in excluded.candidates}
+    assert "p1" not in pids
+    assert "p2" in pids
+
+
+def test_exclude_all_eligible_yields_empty_candidates() -> None:
+    """If every eligible player is excluded, the result is empty.
+
+    Models the lineup case where a starter slot has no remaining
+    unique pick — caller (decisions router) must handle that gracefully
+    rather than crashing or recycling.
+    """
+
+    snap = _snapshot_with_history()
+    http = FakeHttp(league_routes(user_roster_players=("p1", "p2")))
+    reader = FakeSnapshotReader(snap)
+
+    result = pipeline.run(
+        http=http,
+        snapshot_reader=reader,
+        request=_make_request(
+            slot="FLEX",
+            pool="roster",
+            exclude_player_ids=frozenset({"p1", "p2"}),
+        ),
+    )
+    assert result.candidates == ()
+
+
 def test_state_override_skips_state_call() -> None:
     snap = _snapshot_with_history()
     routes = league_routes()

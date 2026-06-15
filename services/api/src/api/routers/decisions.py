@@ -9,15 +9,15 @@ from __future__ import annotations
 
 import math
 from collections import Counter
+from typing import cast
 
 from decision_engine.core import pipeline as decide_pipeline
 from decision_engine.core.eligibility import NON_SELECTABLE_SLOTS
 from decision_engine.core.league_fetch import fetch_league_context, resolve_state
 from decision_engine.core.pipeline import DecideRequest
 from decision_engine.types import NflState, Player, SnapshotData
-from ffdm_app.types import LiveState
 from fastapi import APIRouter, Query
-from typing import cast
+from ffdm_app.types import LiveState
 
 from api.deps import (
     HttpClientDep,
@@ -86,6 +86,10 @@ def get_decisions(
     avoid = avoid_team.upper() if avoid_team else None
     using_prior_season = False
     prior_season: int | None = None
+    # A player recommended for one starter slot must not be recommended
+    # for another (e.g. the best WR cannot fill WR1 AND FLEX). Track
+    # picks across slots and exclude them from subsequent decisions.
+    assigned_player_ids: set[str] = set()
 
     for i, slot in enumerate(league_context.league.roster_positions):
         seen[slot] += 1
@@ -107,6 +111,7 @@ def get_decisions(
             prefer_team=prefer,
             avoid_team=avoid,
             state_override=state_override,
+            exclude_player_ids=frozenset(assigned_player_ids),
         )
 
         result = decide_pipeline.run(
@@ -123,6 +128,7 @@ def get_decisions(
 
         top_candidate = result.candidates[0] if result.candidates else None
         if top_candidate is not None:
+            assigned_player_ids.add(top_candidate.player.player_id)
             sum_mean += top_candidate.score.projected_mean
             sum_variance += top_candidate.score.projected_variance ** 2
 

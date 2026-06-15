@@ -45,9 +45,21 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+# FastAPI's idiomatic Query(default=...) pattern triggers B008; it's how
+# the library is meant to be used (mirrors the typer entrypoint
+# exception in decision-engine).
+"src/api/routers/*.py" = ["B008"]
+"tests/**" = ["B011"]
+
 [tool.mypy]
 python_version = "3.13"
 strict = true
 files = ["src", "tests"]
 mypy_path = "src"
 explicit_package_bases = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+pythonpath = ["src", "."]

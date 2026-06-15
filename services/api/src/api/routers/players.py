@@ -14,8 +14,8 @@ from decision_engine.clients.snapshot_reader import SnapshotMissingError
 from decision_engine.core.league_fetch import resolve_state
 from decision_engine.providers import sleeper
 from decision_engine.types import SnapshotData
-from ffdm_app.types import LiveState
 from fastapi import APIRouter, HTTPException, Query
+from ffdm_app.types import LiveState
 
 from api.deps import (
     HttpClientDep,
