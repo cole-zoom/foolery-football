@@ -39,7 +39,14 @@ AVOID_TEAM_MULTIPLIER = 0.90
 
 @dataclass(frozen=True, slots=True)
 class DecideRequest:
-    """All inputs to one decide invocation."""
+    """All inputs to one decide invocation.
+
+    ``exclude_player_ids`` lets a caller filter players out of the
+    candidate pool *before* eligibility/scoring. The lineup-grid endpoint
+    uses it to prevent the same player from being recommended into
+    multiple slots (e.g. the best WR landing in WR1, WR2, *and* FLEX).
+    Defaults to ``None`` so single-slot ``/decide`` calls are unaffected.
+    """
 
     user: str
     league_id: str
@@ -51,6 +58,7 @@ class DecideRequest:
     prefer_team: str | None
     avoid_team: str | None
     state_override: NflState | None
+    exclude_player_ids: frozenset[str] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,10 +138,12 @@ def run(
     score_fn = get_model(request.model)(snapshot)
 
     pool_player_ids = _build_pool(league_context, snapshot, request.pool)
+    excluded = request.exclude_player_ids or frozenset()
     eligible: list[Player] = [
         snapshot.players[pid]
         for pid in pool_player_ids
-        if pid in snapshot.players
+        if pid not in excluded
+        and pid in snapshot.players
         and player_eligible_for_slot(snapshot.players[pid], request.slot)
     ]
     log.info(

@@ -1,0 +1,93 @@
+name: ci
+
+# Run lint + tests on every PR and every push to main. Set up branch
+# protection in repo settings to require this workflow before merge.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: python (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api, app, decision-engine, stats-loader]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.8.13"
+          enable-cache: true
+          cache-dependency-glob: |
+            services/${{ matrix.service }}/uv.lock
+
+      - name: Sync deps
+        working-directory: services/${{ matrix.service }}
+        run: uv sync --frozen --all-extras
+
+      - name: Lint (ruff)
+        working-directory: services/${{ matrix.service }}
+        run: uv run ruff check src tests
+
+      - name: Test (pytest)
+        working-directory: services/${{ matrix.service }}
+        run: uv run pytest -q
+
+  decision-engine-layering:
+    name: import-linter (decision-engine)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.8.13"
+          enable-cache: true
+          cache-dependency-glob: services/decision-engine/uv.lock
+
+      - name: Sync deps
+        working-directory: services/decision-engine
+        run: uv sync --frozen --all-extras
+
+      - name: Enforce layering
+        working-directory: services/decision-engine
+        run: uv run lint-imports
+
+  web:
+    name: web (typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # ``pnpm build`` runs ``tsc -b && vite build`` — the tsc step is the
+      # real type-check gate. Lint is left out of CI today because the
+      # baseline has open violations; bring it back once that's clean.
+      - name: Build (type-checks via tsc -b)
+        run: pnpm build

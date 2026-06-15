@@ -18,9 +18,9 @@ from decision_engine.clients.snapshot_reader import (
     SnapshotReader,
 )
 from decision_engine.config.settings import SUPPORTED_SCHEMA_VERSION
+from fastapi import Depends
 from ffdm_app import season_cache
 from ffdm_app.types import LiveState
-from fastapi import Depends
 
 from api.config import Settings, load_settings
 

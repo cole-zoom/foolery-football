@@ -10,9 +10,9 @@ from __future__ import annotations
 from typing import cast
 
 from decision_engine.core.league_fetch import resolve_state
+from fastapi import APIRouter, Query
 from ffdm_app import session as app_session
 from ffdm_app.types import AppRequest, LiveState
-from fastapi import APIRouter, Query
 
 from api.deps import (
     HttpClientDep,
