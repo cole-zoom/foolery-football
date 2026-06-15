@@ -1,0 +1,88 @@
+[project]
+name = "stats-loader"
+version = "0.1.0"
+description = "Weekly batch that snapshots Sleeper player metadata + NFL stats to disk."
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.7",
+    "typer>=0.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "import-linter>=2.0",
+    "mypy>=1.10",
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+stats-loader = "stats_loader.entrypoint:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/stats_loader"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # bugbear
+    "UP",  # pyupgrade
+    "SIM", # simplify
+    "RUF",
+]
+ignore = [
+    "E501", # line length handled by formatter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["B011"]
+# typer's idiomatic Option(...) pattern triggers B008; it's how the
+# library is meant to be used.
+"src/stats_loader/entrypoint.py" = ["B008"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src", "tests"]
+mypy_path = "src"
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_decorators = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: hits the real Sleeper API; skipped unless STATS_LOADER_INTEGRATION=1",
+]
+
+# ----- import-linter: enforce intra-service layering -----
+# types -> config -> providers -> clients -> core -> entrypoint
+[tool.importlinter]
+root_packages = ["stats_loader"]
+
+[[tool.importlinter.contracts]]
+name = "Layered architecture"
+type = "layers"
+layers = [
+    "stats_loader.entrypoint",
+    "stats_loader.core",
+    "stats_loader.clients",
+    "stats_loader.providers",
+    "stats_loader.config",
+    "stats_loader.types",
+]

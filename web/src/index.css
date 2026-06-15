@@ -1,0 +1,175 @@
+@import "tailwindcss";
+
+/* One font. */
+@import "@fontsource-variable/geist";
+
+@theme {
+  /* === DARK palette (default) === */
+  --color-ink-base: #0a0a0b;
+  --color-ink-1:    #0e0e10;
+  --color-ink-2:    #111114;
+  --color-ink-3:    #18181c;
+  --color-ink-4:    #1f1f24;
+  --color-ink-5:    #2a2a30;
+  --color-ink-6:    #3a3a42;
+  --color-ink-7:    #5a5a64;
+  --color-ink-8:    #7a7a86;
+  --color-ink-9:    #a0a0ac;
+  --color-ink-10:   #c4c4cc;
+  --color-ink-11:   #e3e3e9;
+  --color-ink-12:   #f5f5f7;
+
+  --color-signal:        #e0162b;
+  --color-signal-soft:   #ff3344;
+  --color-signal-glow:   #e0162b40;
+
+  --color-pos-qb:   #d97706;
+  --color-pos-rb:   #059669;
+  --color-pos-wr:   #0284c7;
+  --color-pos-te:   #7c3aed;
+  --color-pos-flex: #db2777;
+  --color-pos-k:    #65a30d;
+  --color-pos-def:  #0891b2;
+  --color-pos-bn:   #52525b;
+
+  --color-conf-high:   #10b981;
+  --color-conf-medium: #f59e0b;
+  --color-conf-low:    #6b7280;
+
+  --color-good:    #10b981;
+  --color-warn:    #f59e0b;
+
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --tracking-stamp: 0.16em;
+}
+
+/* === LIGHT palette === */
+html:not(.dark) {
+  --color-ink-base: #fafaf9;
+  --color-ink-1:    #f5f5f4;
+  --color-ink-2:    #ffffff;
+  --color-ink-3:    #f5f5f4;
+  --color-ink-4:    #ebebe9;
+  --color-ink-5:    #e0e0dd;
+  --color-ink-6:    #d4d4d1;
+  --color-ink-7:    #9b9b97;
+  --color-ink-8:    #6e6e6a;
+  --color-ink-9:    #4d4d4a;
+  --color-ink-10:   #2e2e2c;
+  --color-ink-11:   #1a1a18;
+  --color-ink-12:   #08080a;
+}
+
+html, body {
+  background: var(--color-ink-base);
+  color: var(--color-ink-12);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "ss02", "cv01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  margin: 0;
+}
+
+html.dark body {
+  background-image:
+    radial-gradient(ellipse 1200px 800px at 50% -20%, #15151a 0%, transparent 60%),
+    radial-gradient(ellipse 800px 600px at 100% 100%, #14141a 0%, transparent 60%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+html:not(.dark) body {
+  background-image:
+    radial-gradient(ellipse 1200px 800px at 50% -20%, rgba(0,0,0,0.025) 0%, transparent 60%),
+    radial-gradient(ellipse 800px 600px at 100% 100%, rgba(0,0,0,0.018) 0%, transparent 60%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+#root { min-height: 100vh; }
+
+/* Tabular numbers helper — same font, just enables tnum + tabular-nums */
+.nums {
+  font-feature-settings: "tnum" 1, "ss01" 1, "cv01" 1;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-sans);
+}
+
+/* Tracked-out uppercase labels — same font, distinct treatment */
+.stamp {
+  font-family: var(--font-sans);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-stamp);
+  font-weight: 500;
+}
+
+/* Headline display — same font, heavier weight */
+.display {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+.hairline {
+  border-color: color-mix(in oklch, var(--color-ink-6) 80%, transparent);
+}
+
+@keyframes signal-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--color-signal-glow), inset 0 0 0 1px color-mix(in oklch, var(--color-signal) 25%, transparent); }
+  50%      { box-shadow: 0 0 56px 0 var(--color-signal-glow), inset 0 0 0 1px color-mix(in oklch, var(--color-signal) 55%, transparent); }
+}
+.signal-glow { animation: signal-pulse 3.4s ease-in-out infinite; }
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise-in { animation: rise-in 380ms cubic-bezier(0.16, 1, 0.3, 1) backwards; }
+
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.pop-in { animation: pop-in 240ms cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* Anything interactive gets the pointer cursor. One rule, no per-component fixes. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+a,
+label,
+select,
+summary,
+[data-radix-collection-item],
+[data-radix-select-trigger],
+[data-radix-popover-trigger],
+[data-radix-dialog-close],
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"] {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+* {
+  scrollbar-color: var(--color-ink-5) transparent;
+  scrollbar-width: thin;
+}
+
+::selection { background: var(--color-signal); color: white; }
+
+:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--color-signal) 70%, transparent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

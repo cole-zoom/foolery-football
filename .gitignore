@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.import_linter_cache/
+*.egg-info/
+
+# Node / Vite
+node_modules/
+web/dist/
+*.log
+
+# Local snapshots — regenerable, large, third-party data we don't own
+data/seasons/
+data/snapshots/
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Claude local overrides (keep settings.json shared, ignore the local one)
+.claude/settings.local.json
