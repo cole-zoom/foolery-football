@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://REPLACE_ME.run.app/:path*"
+      "destination": "https://ff-api-1027935399176.northamerica-northeast2.run.app/:path*"
     }
   ]
 }
