@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from collections import OrderedDict
 from collections.abc import Callable
 from pathlib import Path
@@ -51,12 +52,15 @@ class SnapshotReader(Protocol):
 class CachingSnapshotReader:
     """In-memory LRU cache around any ``SnapshotReader``.
 
-    Snapshot files are large (~5MB players.json + per-week stats, ~50-90MB
-    per season as parsed Python objects) and fully immutable until the
-    loader overwrites them. Re-parsing them per request — let alone per
-    slot, per prefetched week — is a measurable bottleneck under fan-out
-    load. Capped at ``max_seasons`` so we don't OOM after a user pages
-    through history.
+    Snapshot files are large (~5MB players.json + per-week stats, ~100-200MB
+    per season as parsed Python objects). Re-parsing them per request — let
+    alone per slot, per prefetched week — is a measurable bottleneck. The
+    cache is capped at ``max_seasons`` so we don't OOM after a user pages
+    through history, and loads are **single-flight per season** so a burst
+    fan-out (e.g. 18 parallel ``/decisions?week=1..18`` calls for one
+    season) doesn't allocate N copies of the snapshot in parallel before
+    any of them populate the cache. Different seasons still load
+    concurrently.
 
     Keyed by season, invalidated by an opaque ``version_for(season)``
     token. Local backends use the manifest mtime; the GCS backend uses
@@ -74,24 +78,52 @@ class CachingSnapshotReader:
         self._version_for = version_for
         self._max_seasons = max_seasons
         self._cache: OrderedDict[int, tuple[str, SnapshotData]] = OrderedDict()
+        self._registry_lock = threading.Lock()
+        self._season_locks: dict[int, threading.Lock] = {}
 
     def load(self, season: int) -> SnapshotData:
         token = self._version_for(season)
         if token is None:
             # Delegate so the caller sees a proper SnapshotMissingError.
             return self._inner.load(season)
+
+        # Fast path: already cached and fresh. dict.get is atomic under
+        # the GIL; we only need the lock to mutate (move_to_end).
         cached = self._cache.get(season)
         if cached is not None and cached[0] == token:
-            self._cache.move_to_end(season)
+            with self._registry_lock:
+                if season in self._cache:
+                    self._cache.move_to_end(season)
             return cached[1]
-        data = self._inner.load(season)
-        # Atomic dict assignment under GIL — concurrent loads may race
-        # and double-parse, but the result is correct.
-        self._cache[season] = (token, data)
-        self._cache.move_to_end(season)
-        while len(self._cache) > self._max_seasons:
-            self._cache.popitem(last=False)
-        return data
+
+        # Slow path: serialise concurrent loads of the same season so a
+        # burst of N requests doesn't allocate N snapshots in flight.
+        lock = self._get_season_lock(season)
+        with lock:
+            # Re-check inside the lock; another thread may have populated
+            # the cache while we were waiting.
+            cached = self._cache.get(season)
+            if cached is not None and cached[0] == token:
+                with self._registry_lock:
+                    if season in self._cache:
+                        self._cache.move_to_end(season)
+                return cached[1]
+
+            data = self._inner.load(season)
+            with self._registry_lock:
+                self._cache[season] = (token, data)
+                self._cache.move_to_end(season)
+                while len(self._cache) > self._max_seasons:
+                    self._cache.popitem(last=False)
+            return data
+
+    def _get_season_lock(self, season: int) -> threading.Lock:
+        with self._registry_lock:
+            lock = self._season_locks.get(season)
+            if lock is None:
+                lock = threading.Lock()
+                self._season_locks[season] = lock
+            return lock
 
 
 class SnapshotMissingError(RuntimeError):
