@@ -11,11 +11,15 @@ from collections import Counter
 from decision_engine.core.eligibility import NON_SELECTABLE_SLOTS
 from decision_engine.core.league_fetch import fetch_league_context, resolve_state
 from decision_engine.types import LeagueContext, Player
-from ffdm_app import season_cache
 from ffdm_app.types import LiveState
 from fastapi import APIRouter, Query
 
-from api.deps import HttpClientDep, SettingsDep, SnapshotReaderDep
+from api.deps import (
+    HttpClientDep,
+    PrepareSeasonDep,
+    SettingsDep,
+    SnapshotReaderDep,
+)
 from api.hydrate import player_to_wire
 from api.schemas import LeagueContextOut, LeagueSummaryOut, RosterSlotOut
 
@@ -28,6 +32,7 @@ def get_league_context(
     user: str,
     http: HttpClientDep,
     snapshot_reader: SnapshotReaderDep,
+    prepare_season: PrepareSeasonDep,
     settings: SettingsDep,
     season: int | None = Query(default=None),
 ) -> LeagueContextOut:
@@ -37,11 +42,9 @@ def get_league_context(
         http, username=user, league_id=league_id, season=resolved_season
     )
 
-    season_cache.ensure_season(
+    prepare_season(
         resolved_season,
-        snapshot_root=settings.snapshot_root,
-        sleeper_base_url=settings.sleeper_base_url,
-        live_state=LiveState(season=state.season, week=state.week),
+        LiveState(season=state.season, week=state.week),
     )
 
     snapshot = snapshot_reader.load(resolved_season)

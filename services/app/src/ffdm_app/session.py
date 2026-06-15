@@ -8,11 +8,15 @@ inputs and returns structured outputs. Keep it that way.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import cast
 
 from decision_engine.clients.http import SleeperHttpClient as DecideHttpClient
-from decision_engine.clients.snapshot_reader import FilesystemSnapshotReader
+from decision_engine.clients.snapshot_reader import (
+    FilesystemSnapshotReader,
+    SnapshotReader,
+)
 from decision_engine.config.settings import (
     DEFAULT_SLEEPER_BASE_URL as DECISION_ENGINE_DEFAULT_BASE_URL,
 )
@@ -29,6 +33,8 @@ from ffdm_app.season_cache import (
     list_cached_seasons,
 )
 from ffdm_app.types import AppRequest, LiveState, SeasonInfo
+
+PrepareSeason = Callable[[int, LiveState], None]
 
 log = logging.getLogger(__name__)
 
@@ -113,24 +119,34 @@ def decide(
     request: AppRequest,
     *,
     live_state: LiveState | None = None,
+    snapshot_reader: SnapshotReader | None = None,
+    prepare_season: PrepareSeason | None = None,
 ) -> DecideResult:
     """Ensure the cache, then run the decision engine. Returns the raw result.
 
-    The caller (CLI today, web later) renders.
+    The caller (CLI today, web later) renders. ``snapshot_reader`` and
+    ``prepare_season`` are injected by the API in prod so the reader is
+    the GCS-backed process-wide cache and ``prepare_season`` is the
+    read-only strategy (don't download, just validate the season).
+    Local CLI usage leaves them unset and gets filesystem + inline
+    download, same as before.
     """
 
     snapshot_root = request.snapshot_root or default_snapshot_root()
     base_url = request.sleeper_base_url or DEFAULT_SLEEPER_BASE_URL
     state = live_state or fetch_live_state(sleeper_base_url=base_url)
 
-    ensure_season(
-        request.season,
-        snapshot_root=snapshot_root,
-        sleeper_base_url=base_url,
-        live_state=state,
-    )
+    if prepare_season is not None:
+        prepare_season(request.season, state)
+    else:
+        ensure_season(
+            request.season,
+            snapshot_root=snapshot_root,
+            sleeper_base_url=base_url,
+            live_state=state,
+        )
 
-    snapshot_reader = FilesystemSnapshotReader(
+    reader: SnapshotReader = snapshot_reader or FilesystemSnapshotReader(
         snapshot_root,
         supported_schema_version=SUPPORTED_SCHEMA_VERSION,
     )
@@ -155,7 +171,7 @@ def decide(
     with DecideHttpClient(base_url) as http:
         return decide_pipeline.run(
             http=http,
-            snapshot_reader=snapshot_reader,
+            snapshot_reader=reader,
             request=decide_request,
         )
 

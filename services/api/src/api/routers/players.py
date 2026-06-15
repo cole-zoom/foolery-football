@@ -14,11 +14,15 @@ from decision_engine.clients.snapshot_reader import SnapshotMissingError
 from decision_engine.core.league_fetch import resolve_state
 from decision_engine.providers import sleeper
 from decision_engine.types import SnapshotData
-from ffdm_app import season_cache
 from ffdm_app.types import LiveState
 from fastapi import APIRouter, HTTPException, Query
 
-from api.deps import HttpClientDep, SettingsDep, SnapshotReaderDep
+from api.deps import (
+    HttpClientDep,
+    PrepareSeasonDep,
+    SettingsDep,
+    SnapshotReaderDep,
+)
 from api.hydrate import player_to_wire
 from api.schemas import PlayerStatsOut, WeeklyStatLineOut
 
@@ -30,6 +34,7 @@ def get_player_stats(
     player_id: str,
     http: HttpClientDep,
     snapshot_reader: SnapshotReaderDep,
+    prepare_season: PrepareSeasonDep,
     settings: SettingsDep,
     league_id: str = Query(
         ..., description="League whose scoring weights to apply when computing points."
@@ -45,11 +50,9 @@ def get_player_stats(
 ) -> PlayerStatsOut:
     state = resolve_state(http, None)
     resolved_season = season if season is not None else state.season
-    season_cache.ensure_season(
+    prepare_season(
         resolved_season,
-        snapshot_root=settings.snapshot_root,
-        sleeper_base_url=settings.sleeper_base_url,
-        live_state=LiveState(season=state.season, week=state.week),
+        LiveState(season=state.season, week=state.week),
     )
     snapshot = snapshot_reader.load(resolved_season)
 

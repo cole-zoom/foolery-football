@@ -14,6 +14,7 @@ from decision_engine.clients.snapshot_reader import (
 from decision_engine.core.eligibility import UnsupportedSlotError
 from decision_engine.core.league_fetch import UserInputError
 from decision_engine.providers.sleeper import SchemaError
+from ffdm_app.season_cache import FutureSeasonError
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -29,6 +30,10 @@ def register(app: FastAPI) -> None:
 
     @app.exception_handler(UnsupportedSlotError)
     async def _bad_slot(_req: Request, exc: UnsupportedSlotError) -> JSONResponse:
+        return _json(400, str(exc))
+
+    @app.exception_handler(FutureSeasonError)
+    async def _future_season(_req: Request, exc: FutureSeasonError) -> JSONResponse:
         return _json(400, str(exc))
 
     @app.exception_handler(SnapshotMissingError)

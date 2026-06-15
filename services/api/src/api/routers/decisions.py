@@ -15,12 +15,16 @@ from decision_engine.core.eligibility import NON_SELECTABLE_SLOTS
 from decision_engine.core.league_fetch import fetch_league_context, resolve_state
 from decision_engine.core.pipeline import DecideRequest
 from decision_engine.types import NflState, Player, SnapshotData
-from ffdm_app import season_cache
 from ffdm_app.types import LiveState
 from fastapi import APIRouter, Query
 from typing import cast
 
-from api.deps import HttpClientDep, SettingsDep, SnapshotReaderDep
+from api.deps import (
+    HttpClientDep,
+    PrepareSeasonDep,
+    SettingsDep,
+    SnapshotReaderDep,
+)
 from api.hydrate import player_to_wire
 from api.schemas import (
     CandidateOut,
@@ -41,6 +45,7 @@ def get_decisions(
     user: str,
     http: HttpClientDep,
     snapshot_reader: SnapshotReaderDep,
+    prepare_season: PrepareSeasonDep,
     settings: SettingsDep,
     risk: float = Query(default=0.5, ge=0.0, le=1.0),
     pool: Pool = Query(default="roster"),
@@ -57,12 +62,7 @@ def get_decisions(
         week if week is not None else _default_week(resolved_season, live_state)
     )
 
-    season_cache.ensure_season(
-        resolved_season,
-        snapshot_root=settings.snapshot_root,
-        sleeper_base_url=settings.sleeper_base_url,
-        live_state=live_state,
-    )
+    prepare_season(resolved_season, live_state)
 
     # Load once, reuse across every slot. Without this, we re-parse the
     # ~5MB snapshot 2N times (one in _player_lookup, one inside each

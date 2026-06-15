@@ -1,0 +1,56 @@
+# Cloud Build recipe for the API.
+#
+# Runs on every push to main, triggered by the Cloud Build trigger the
+# Cloud Run "Continuously deploy from repo" wizard created. Configure
+# that trigger to point at this file:
+#   Cloud Build → Triggers → edit → Configuration
+#     Type: Cloud Build configuration file (yaml or json)
+#     Location: Repository
+#     File: cloudbuild.yaml
+#
+# Why this exists: the trigger's "Dockerfile" mode uses the Dockerfile's
+# parent directory as the build context. Our Dockerfile lives in
+# services/api/ but needs to COPY from services/app, services/decision-engine,
+# services/stats-loader. So we need the build context to be the repo root.
+
+substitutions:
+  _SERVICE_NAME: ffdm-api
+  _REGION: us-central1
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - services/api/Dockerfile
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_SERVICE_NAME}:${SHORT_SHA}
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_SERVICE_NAME}:latest
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_SERVICE_NAME}
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - services
+      - update
+      - ${_SERVICE_NAME}
+      - --region=${_REGION}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_SERVICE_NAME}:${SHORT_SHA}
+      - --quiet
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_SERVICE_NAME}:${SHORT_SHA}
+
+options:
+  logging: CLOUD_LOGGING_ONLY

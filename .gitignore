@@ -33,3 +33,11 @@ data/snapshots/
 
 # Claude local overrides (keep settings.json shared, ignore the local one)
 .claude/settings.local.json
+
+# Terraform
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/terraform.tfvars
+infra/*.tfstate
+infra/*.tfstate.backup
+infra/*.tfplan

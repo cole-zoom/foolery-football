@@ -14,7 +14,12 @@ from ffdm_app import session as app_session
 from ffdm_app.types import AppRequest, LiveState
 from fastapi import APIRouter, Query
 
-from api.deps import HttpClientDep, SettingsDep
+from api.deps import (
+    HttpClientDep,
+    PrepareSeasonDep,
+    SettingsDep,
+    SnapshotReaderDep,
+)
 from api.hydrate import player_to_wire
 from api.schemas import CandidateOut, DecideOut, Pool, ScoreOut
 
@@ -27,6 +32,8 @@ def decide(
     league_id: str,
     slot: str,
     http: HttpClientDep,
+    snapshot_reader: SnapshotReaderDep,
+    prepare_season: PrepareSeasonDep,
     settings: SettingsDep,
     risk: float = Query(default=0.5, ge=0.0, le=1.0),
     pool: Pool = Query(default="roster"),
@@ -63,7 +70,12 @@ def decide(
         sleeper_base_url=settings.sleeper_base_url,
     )
 
-    result = app_session.decide(request, live_state=live_state)
+    result = app_session.decide(
+        request,
+        live_state=live_state,
+        snapshot_reader=snapshot_reader,
+        prepare_season=prepare_season,
+    )
 
     base = settings.headshot_base_url
     candidates = [
