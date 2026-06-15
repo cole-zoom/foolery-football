@@ -14,8 +14,11 @@
 # services/stats-loader. So we need the build context to be the repo root.
 
 substitutions:
-  _SERVICE_NAME: ffdm-api
+  _SERVICE_NAME: ff-api
+  # Where the image is built + pushed (Artifact Registry repo lives here).
   _REGION: us-central1
+  # Where the Cloud Run service runs. Cross-region image pulls are fine.
+  _RUN_REGION: northamerica-northeast2
 
 steps:
   - id: build
@@ -45,7 +48,7 @@ steps:
       - services
       - update
       - ${_SERVICE_NAME}
-      - --region=${_REGION}
+      - --region=${_RUN_REGION}
       - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/cloud-run-source-deploy/${_SERVICE_NAME}:${SHORT_SHA}
       - --quiet
 
