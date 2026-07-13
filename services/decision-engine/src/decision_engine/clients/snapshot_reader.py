@@ -41,6 +41,7 @@ log = logging.getLogger(__name__)
 MANIFEST_NAME: Final[str] = "manifest.json"
 PLAYERS_NAME: Final[str] = "players.json"
 PRIOR_SEASON_NAME: Final[str] = "stats_prior_season.json"
+SCHEDULE_NAME: Final[str] = "schedule.json"
 
 
 class SnapshotReader(Protocol):
@@ -137,22 +138,23 @@ class SnapshotSchemaError(RuntimeError):
 def assemble_snapshot(
     season: int,
     *,
-    load_json: Callable[[str], dict[str, object]],
+    load_json: Callable[[str], object],
     has_object: Callable[[str], bool],
     location_label: str,
     supported_schema_version: int,
 ) -> SnapshotData:
     """Parse a season's snapshot from a backend-agnostic byte source.
 
-    ``load_json(name)`` returns the parsed JSON object for ``name``
-    (e.g. ``manifest.json``). It must raise ``SnapshotSchemaError`` on
+    ``load_json(name)`` returns the parsed JSON value for ``name``
+    (e.g. ``manifest.json``) — any top-level type; per-artifact shape
+    checks happen here. It must raise ``SnapshotSchemaError`` on
     malformed JSON. The manifest **must exist** when this is called —
     callers should check up-front and raise ``SnapshotMissingError`` if
-    not. ``has_object(name)`` is consulted for optional artifacts (only
-    the prior-season stats today).
+    not. ``has_object(name)`` is consulted for optional artifacts (the
+    prior-season stats and the schedule today).
     """
 
-    manifest = load_json(MANIFEST_NAME)
+    manifest = _as_object(load_json(MANIFEST_NAME), MANIFEST_NAME, location_label)
     schema_version = _require_int(manifest, "schema_version", location_label)
     if schema_version > supported_schema_version:
         raise SnapshotSchemaError(
@@ -178,7 +180,7 @@ def assemble_snapshot(
     upcoming_week = int(upcoming) if isinstance(upcoming, int) else None
     prior_bootstrapped = bool(manifest.get("prior_season_bootstrapped"))
 
-    players_raw = load_json(PLAYERS_NAME)
+    players_raw = _as_object(load_json(PLAYERS_NAME), PLAYERS_NAME, location_label)
     players = _players_from_raw(players_raw)
 
     weekly_stats: dict[int, dict[str, dict[str, float]]] = {}
@@ -188,13 +190,16 @@ def assemble_snapshot(
             raise SnapshotSchemaError(
                 f"{location_label}: manifest lists week {week} but {name} is missing"
             )
-        weekly_stats[week] = _coerce_stats(load_json(name), label=name)
+        weekly_stats[week] = _coerce_stats(
+            _as_object(load_json(name), name, location_label), label=name
+        )
 
     prior_season_stats: dict[str, dict[str, float]] = {}
     if prior_bootstrapped:
         if has_object(PRIOR_SEASON_NAME):
             prior_season_stats = _coerce_stats(
-                load_json(PRIOR_SEASON_NAME), label=PRIOR_SEASON_NAME
+                _as_object(load_json(PRIOR_SEASON_NAME), PRIOR_SEASON_NAME, location_label),
+                label=PRIOR_SEASON_NAME,
             )
         else:
             log.warning(
@@ -202,6 +207,12 @@ def assemble_snapshot(
                 location_label,
                 PRIOR_SEASON_NAME,
             )
+
+    schedule: dict[int, dict[str, str]] = {}
+    if has_object(SCHEDULE_NAME):
+        schedule = _schedule_from_raw(load_json(SCHEDULE_NAME), label=SCHEDULE_NAME)
+
+    version = manifest.get("snapshot_finished_at")
 
     return SnapshotData(
         snapshot_dir=location_label,
@@ -212,6 +223,8 @@ def assemble_snapshot(
         players=players,
         weekly_stats=weekly_stats,
         prior_season_stats=prior_season_stats,
+        schedule=schedule,
+        snapshot_version=version if isinstance(version, str) else None,
     )
 
 
@@ -231,13 +244,13 @@ class FilesystemSnapshotReader:
             )
         log.info("Reading snapshot %s", snapshot_dir)
 
-        def load_json(name: str) -> dict[str, object]:
+        def load_json(name: str) -> object:
             path = snapshot_dir / name
             if not path.exists():
                 raise SnapshotSchemaError(
                     f"{snapshot_dir}: missing {name} (incomplete snapshot)"
                 )
-            return _load_json_object(path)
+            return _load_json_value(path)
 
         def has_object(name: str) -> bool:
             return (snapshot_dir / name).exists()
@@ -260,17 +273,51 @@ class FilesystemSnapshotReader:
         return str(mtime)
 
 
-def _load_json_object(path: Path) -> dict[str, object]:
+def _load_json_value(path: Path) -> object:
     try:
         with path.open(encoding="utf-8") as fh:
-            payload = json.load(fh)
+            return json.load(fh)
     except json.JSONDecodeError as exc:
         raise SnapshotSchemaError(f"{path}: malformed JSON: {exc}") from exc
+
+
+def _as_object(payload: object, name: str, location_label: str) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise SnapshotSchemaError(
-            f"{path}: expected object at top level, got {type(payload).__name__}"
+            f"{location_label}/{name}: expected object at top level, "
+            f"got {type(payload).__name__}"
         )
     return payload
+
+
+def _schedule_from_raw(payload: object, *, label: str) -> dict[int, dict[str, str]]:
+    """``schedule.json`` (list of games) -> week -> team -> opponent.
+
+    Both directions of every game are recorded so a single dict lookup
+    answers "who does <team> face in week <W>". Malformed games are
+    logged and skipped (quarantine over drop).
+    """
+
+    if not isinstance(payload, list):
+        raise SnapshotSchemaError(
+            f"{label}: expected array at top level, got {type(payload).__name__}"
+        )
+
+    out: dict[int, dict[str, str]] = {}
+    for i, game in enumerate(payload):
+        if not isinstance(game, dict):
+            log.warning("%s: game %d not an object; skipping", label, i)
+            continue
+        week = game.get("week")
+        home = game.get("home")
+        away = game.get("away")
+        if not isinstance(week, int) or not isinstance(home, str) or not isinstance(away, str):
+            log.warning("%s: game %d missing week/home/away; skipping", label, i)
+            continue
+        week_map = out.setdefault(week, {})
+        week_map[home] = away
+        week_map[away] = home
+    return out
 
 
 def _players_from_raw(raw: dict[str, object]) -> dict[str, Player]:

@@ -135,6 +135,14 @@ class SnapshotData(BaseModel):
     players: dict[str, Player]
     weekly_stats: dict[int, dict[str, dict[str, float]]] = Field(default_factory=dict)
     prior_season_stats: dict[str, dict[str, float]] = Field(default_factory=dict)
+    # week -> team -> opponent, both directions of every game. Built from
+    # the optional ``schedule.json`` artifact; empty for snapshots taken
+    # before the loader learned to fetch the schedule.
+    schedule: dict[int, dict[str, str]] = Field(default_factory=dict)
+    # Manifest ``snapshot_finished_at``, used as a cache-invalidation
+    # token by consumers that memoise work derived from this snapshot
+    # (e.g. the scoring-model build cache). None for legacy manifests.
+    snapshot_version: str | None = None
 
 
 class NflState(BaseModel):
