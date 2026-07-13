@@ -65,3 +65,19 @@ def make_weekly(player_ids: list[str]) -> dict[str, dict[str, float]]:
     """Build a plausible weekly stats/projections payload."""
 
     return {pid: {"pass_yd": 200.0, "rush_td": 1.0} for pid in player_ids}
+
+
+def make_schedule(weeks: int = 18) -> list[dict[str, object]]:
+    """Build a plausible /schedule/nfl/regular/<season> payload."""
+
+    return [
+        {
+            "status": "complete",
+            "date": "2026-09-13",
+            "week": w,
+            "home": "KC",
+            "away": "BUF",
+            "game_id": f"20261{w:02d}02",
+        }
+        for w in range(1, weeks + 1)
+    ]

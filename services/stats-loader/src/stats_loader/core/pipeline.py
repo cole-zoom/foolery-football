@@ -86,6 +86,22 @@ def run(
     if writer is not None:
         writer.write_artifact("players.json", players_payload)
 
+    # --- season schedule (who plays whom, per week) ---
+    # Feeds the context scoring model's opponent-defense feature. Not
+    # load-bearing for the naive model, so a 404 is a soft miss like the
+    # prior-season bootstrap — warn and continue rather than fail the run.
+    schedule_path = f"/schedule/nfl/regular/{plan.season}"
+    try:
+        schedule_payload = sleeper.validate_schedule(
+            http.get_json(schedule_path), label=schedule_path
+        )
+    except NotFoundError as exc:
+        log.warning("Schedule unavailable (%s); skipping.", exc)
+    else:
+        sources["schedule"] = schedule_path
+        if writer is not None:
+            writer.write_artifact("schedule.json", schedule_payload)
+
     # --- past completed weeks: stats + projections ---
     for week in plan.completed_weeks:
         stats_path = f"/v1/stats/nfl/regular/{plan.season}/{week}"

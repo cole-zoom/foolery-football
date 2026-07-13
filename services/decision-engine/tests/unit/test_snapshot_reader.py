@@ -22,6 +22,7 @@ def _write_snapshot(
     players: dict[str, dict[str, object]],
     weekly: dict[int, dict[str, dict[str, float]]] | None = None,
     prior: dict[str, dict[str, float]] | None = None,
+    schedule: list[object] | None = None,
 ) -> Path:
     snap_dir = root / str(season)
     snap_dir.mkdir(parents=True)
@@ -32,6 +33,8 @@ def _write_snapshot(
             (snap_dir / f"stats_week_{w}.json").write_text(json.dumps(table))
     if prior is not None:
         (snap_dir / "stats_prior_season.json").write_text(json.dumps(prior))
+    if schedule is not None:
+        (snap_dir / "schedule.json").write_text(json.dumps(schedule))
     return snap_dir
 
 
@@ -138,6 +141,69 @@ def test_missing_weekly_stats_file_raises(tmp_path: Path) -> None:
     reader = FilesystemSnapshotReader(tmp_path, supported_schema_version=1)
     with pytest.raises(SnapshotSchemaError, match="stats_week_2"):
         reader.load(2025)
+
+
+def test_schedule_absent_yields_empty_mapping(tmp_path: Path) -> None:
+    """Old snapshots (no schedule.json) must keep loading fine."""
+
+    _write_snapshot(
+        tmp_path,
+        season=2025,
+        manifest=_basic_manifest(season=2025, weeks=[1]),
+        players={"p1": {"player_id": "p1", "full_name": "X", "fantasy_positions": ["WR"]}},
+        weekly={1: {"p1": {"rec_yd": 50.0}}},
+    )
+    reader = FilesystemSnapshotReader(tmp_path, supported_schema_version=1)
+    snap = reader.load(2025)
+    assert snap.schedule == {}
+
+
+def test_schedule_parsed_into_week_team_opponent(tmp_path: Path) -> None:
+    _write_snapshot(
+        tmp_path,
+        season=2025,
+        manifest=_basic_manifest(season=2025, weeks=[1]),
+        players={"p1": {"player_id": "p1", "full_name": "X", "fantasy_positions": ["WR"]}},
+        weekly={1: {"p1": {"rec_yd": 50.0}}},
+        schedule=[
+            {"week": 1, "home": "KC", "away": "BUF", "status": "complete"},
+            {"week": 2, "home": "BUF", "away": "NYJ", "status": "pre_game"},
+            {"week": 2, "home": "not-a-game"},  # malformed: skipped, not fatal
+        ],
+    )
+    reader = FilesystemSnapshotReader(tmp_path, supported_schema_version=1)
+    snap = reader.load(2025)
+
+    # Both directions of each game are addressable.
+    assert snap.schedule[1] == {"KC": "BUF", "BUF": "KC"}
+    assert snap.schedule[2] == {"BUF": "NYJ", "NYJ": "BUF"}
+
+
+def test_schedule_wrong_top_level_type_raises(tmp_path: Path) -> None:
+    _write_snapshot(
+        tmp_path,
+        season=2025,
+        manifest=_basic_manifest(season=2025, weeks=[1]),
+        players={"p1": {"player_id": "p1", "full_name": "X", "fantasy_positions": ["WR"]}},
+        weekly={1: {"p1": {"rec_yd": 50.0}}},
+    )
+    (tmp_path / "2025" / "schedule.json").write_text(json.dumps({"week": 1}))
+    reader = FilesystemSnapshotReader(tmp_path, supported_schema_version=1)
+    with pytest.raises(SnapshotSchemaError, match="expected array"):
+        reader.load(2025)
+
+
+def test_snapshot_version_lifted_from_manifest(tmp_path: Path) -> None:
+    _write_snapshot(
+        tmp_path,
+        season=2025,
+        manifest=_basic_manifest(season=2025, weeks=[1]),
+        players={"p1": {"player_id": "p1", "full_name": "X", "fantasy_positions": ["WR"]}},
+        weekly={1: {"p1": {"rec_yd": 50.0}}},
+    )
+    reader = FilesystemSnapshotReader(tmp_path, supported_schema_version=1)
+    snap = reader.load(2025)
+    assert snap.snapshot_version == "2026-09-15T00:00:42+00:00"
 
 
 def test_loads_prior_season_when_bootstrapped(tmp_path: Path) -> None:

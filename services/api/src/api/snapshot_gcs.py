@@ -61,7 +61,7 @@ class GcsSnapshotReader:
         location_label = f"gs://{self._bucket_name}/{season_prefix}"
         log.info("Reading snapshot %s", location_label)
 
-        def load_json(name: str) -> dict[str, object]:
+        def load_json(name: str) -> object:
             blob = self._bucket.blob(f"{season_prefix}/{name}")
             try:
                 payload = blob.download_as_bytes()
@@ -71,17 +71,13 @@ class GcsSnapshotReader:
                     f"{location_label}: failed to read {name}: {exc}"
                 ) from exc
             try:
-                parsed = json.loads(payload)
+                # Top-level type is checked per artifact in assemble_snapshot
+                # (most artifacts are objects; schedule.json is an array).
+                return json.loads(payload)
             except json.JSONDecodeError as exc:
                 raise SnapshotSchemaError(
                     f"{location_label}/{name}: malformed JSON: {exc}"
                 ) from exc
-            if not isinstance(parsed, dict):
-                raise SnapshotSchemaError(
-                    f"{location_label}/{name}: expected object at top level, "
-                    f"got {type(parsed).__name__}"
-                )
-            return parsed
 
         def has_object(name: str) -> bool:
             return self._bucket.blob(f"{season_prefix}/{name}").exists(self._client)

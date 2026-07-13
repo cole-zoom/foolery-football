@@ -97,6 +97,47 @@ def validate_players(payload: object) -> SleeperPayload:
     return payload
 
 
+def validate_schedule(payload: object, *, label: str) -> list[object]:
+    """Validate `/schedule/nfl/regular/<season>` — a list of game objects.
+
+    Each game needs ``week`` (int) and ``home``/``away`` (team codes) for
+    the decision engine to build its week -> team -> opponent lookup.
+    Games missing those get logged and kept verbatim (quarantine over
+    drop); a payload where *no* game carries them means the endpoint
+    changed shape, and we abort.
+    """
+
+    if not isinstance(payload, list):
+        raise SchemaError(f"{label}: expected array, got {type(payload).__name__}")
+
+    if not payload:
+        raise SchemaError(f"{label}: empty schedule — possible upstream change, aborting.")
+
+    usable = 0
+    for i, game in enumerate(payload):
+        if not isinstance(game, dict):
+            log.warning("%s: game %d is not an object; kept verbatim", label, i)
+            continue
+        week = game.get("week")
+        if (
+            isinstance(week, int)
+            and isinstance(game.get("home"), str)
+            and isinstance(game.get("away"), str)
+        ):
+            usable += 1
+        else:
+            log.warning(
+                "%s: game %d missing week/home/away; kept verbatim", label, i
+            )
+
+    if usable == 0:
+        raise SchemaError(
+            f"{label}: no game has week/home/away — did Sleeper change the schema?"
+        )
+
+    return payload
+
+
 def validate_weekly(payload: object, *, label: str, allow_empty: bool) -> SleeperPayload:
     """Validate a `/v1/stats/...` or `/v1/projections/...` response.
 
