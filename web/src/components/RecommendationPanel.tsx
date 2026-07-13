@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, X } from 'lucide-react'
-import { api, type Candidate, type Pool } from '@/lib/api'
+import { api, type Candidate, type Model, type Pool } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { slotBase, slotLabel } from '@/lib/positions'
 import { FieldSelect } from './FieldSelect'
@@ -20,6 +20,7 @@ export function RecommendationPanel({
   slotId,
   risk,
   pool,
+  model,
   onPoolChange,
   pinnedPlayerId,
   onPin,
@@ -35,6 +36,7 @@ export function RecommendationPanel({
   slotId: string | null
   risk: number
   pool: Pool
+  model: Model
   onPoolChange: (p: Pool) => void
   pinnedPlayerId: string | null
   onPin: (c: Candidate) => void
@@ -45,7 +47,7 @@ export function RecommendationPanel({
 
   const q = useQuery({
     enabled: open && !!slotBaseStr && week !== null,
-    queryKey: ['decide', user, leagueId, season, week, slotBaseStr, risk, pool],
+    queryKey: ['decide', user, leagueId, season, week, slotBaseStr, risk, pool, model],
     queryFn: () =>
       api.decide({
         user,
@@ -53,6 +55,7 @@ export function RecommendationPanel({
         slot: slotBaseStr!,
         risk,
         pool,
+        model,
         season,
         week: week ?? undefined,
         limit: 12,
@@ -162,7 +165,10 @@ export function RecommendationPanel({
       {q.data && (
         <div className="px-7 py-4 border-t hairline flex items-center justify-between stamp text-[10px] text-ink-7">
           <span>SCORED {q.data.candidates.length} CANDIDATES</span>
-          <span>WK {q.data.week} · {q.data.season} · RISK {q.data.risk.toFixed(2)}</span>
+          <span>
+            WK {q.data.week} · {q.data.season} · RISK {q.data.risk.toFixed(2)} ·{' '}
+            {model.toUpperCase()}
+          </span>
         </div>
       )}
     </Sheet>

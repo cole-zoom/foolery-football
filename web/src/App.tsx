@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Database, LayoutDashboard, Loader2, RotateCcw, TrendingUp } from 'lucide-react'
-import { api, type Candidate, type Pool, type SlotDecision } from '@/lib/api'
+import { api, MODELS, type Candidate, type Model, type Pool, type SlotDecision } from '@/lib/api'
 import { EntryForm } from '@/components/EntryForm'
 import { FieldSelect } from '@/components/FieldSelect'
 import { RiskKnob } from '@/components/RiskKnob'
@@ -31,6 +31,7 @@ export default function App() {
   const [openPlayerId, setOpenPlayerId] = useState<string | null>(null)
   const [risk, setRisk] = useState(0.5)
   const [pool, setPool] = useState<Pool>('roster')
+  const [model, setModel] = useState<Model>('context')
   const [week, setWeek] = useState<number | null>(null)
   const [prefer, setPrefer] = useState<string | null>(null)
   const [avoid, setAvoid] = useState<string | null>(null)
@@ -60,6 +61,8 @@ export default function App() {
       setRisk={setRisk}
       pool={pool}
       setPool={setPool}
+      model={model}
+      setModel={setModel}
       week={week}
       setWeek={setWeek}
       prefer={prefer}
@@ -83,6 +86,8 @@ function SessionView({
   setRisk,
   pool,
   setPool,
+  model,
+  setModel,
   week,
   setWeek,
   prefer,
@@ -102,6 +107,8 @@ function SessionView({
   setRisk: (n: number) => void
   pool: Pool
   setPool: (p: Pool) => void
+  model: Model
+  setModel: (m: Model) => void
   week: number | null
   setWeek: (w: number | null) => void
   prefer: string | null
@@ -168,6 +175,7 @@ function SessionView({
       week,
       debouncedRisk,
       pool,
+      model,
       prefer,
       avoid,
     ],
@@ -177,6 +185,7 @@ function SessionView({
         user: session.username,
         risk: debouncedRisk,
         pool,
+        model,
         season: session.season,
         week: week ?? undefined,
         prefer_team: prefer ?? undefined,
@@ -212,6 +221,7 @@ function SessionView({
           w,
           debouncedRisk,
           pool,
+          model,
           prefer,
           avoid,
         ],
@@ -221,6 +231,7 @@ function SessionView({
             user: session.username,
             risk: debouncedRisk,
             pool,
+            model,
             season: session.season,
             week: w,
             prefer_team: prefer ?? undefined,
@@ -240,6 +251,7 @@ function SessionView({
     week,
     debouncedRisk,
     pool,
+    model,
     prefer,
     avoid,
     session.leagueId,
@@ -281,6 +293,10 @@ function SessionView({
     let sum = 0
     let varianceSum = 0
     let allPresent = true
+    // How many projected points the model's lineup gains over the
+    // user's current Sleeper lineup — the number that says whether
+    // following the recommendations changes the outcome.
+    let edge = 0
     for (const d of decisionsQ.data.decisions) {
       const pin = pins[d.slot_id]
       if (pin) {
@@ -291,6 +307,10 @@ function SessionView({
       } else if (d.recommended) {
         sum += d.recommended.score.projected_mean
         varianceSum += d.recommended.score.projected_variance ** 2
+        const starterScore = d.current_starter_score ?? null
+        if (!d.matches_current && starterScore) {
+          edge += d.recommended.score.projected_mean - starterScore.projected_mean
+        }
       } else {
         allPresent = false
       }
@@ -299,6 +319,7 @@ function SessionView({
       total: sum,
       stddev: Math.sqrt(varianceSum),
       complete: allPresent,
+      edge,
     }
   }, [decisionsQ.data, pins])
 
@@ -352,6 +373,17 @@ function SessionView({
               size="sm"
               triggerClassName="min-w-[150px]"
             />
+            <FieldSelect
+              label="MODEL"
+              value={model}
+              onChange={(v) => {
+                setModel(v as Model)
+                setPins({})
+              }}
+              options={MODELS.map((m) => ({ value: m.value, label: m.label }))}
+              size="sm"
+              triggerClassName="min-w-[170px]"
+            />
             <Divider />
             <RiskKnob value={risk} onChange={setRisk} pending={riskPending} />
             <Divider />
@@ -388,7 +420,9 @@ function SessionView({
                 Week <span className="text-[var(--color-signal)]">{week ?? '—'}</span> · {session.season}
               </h2>
               <p className="text-ink-8 text-sm mt-2 max-w-md leading-relaxed">
-                Top recommendation per slot at <span className="text-ink-11">risk {debouncedRisk.toFixed(2)}</span>.
+                Top recommendation per slot from the{' '}
+                <span className="text-ink-11">{model}</span> model at{' '}
+                <span className="text-ink-11">risk {debouncedRisk.toFixed(2)}</span>.
                 Click a slot for the full ranked list.
                 {pinnedCount > 0 && (
                   <>
@@ -401,6 +435,7 @@ function SessionView({
             <ProjectionCard
               total={effectiveTotal?.total ?? null}
               stddev={effectiveTotal?.stddev ?? null}
+              edge={effectiveTotal?.edge ?? null}
               loading={decisionsQ.isFetching || riskPending}
             />
           </div>
@@ -457,6 +492,11 @@ function SessionView({
                       score: d?.recommended?.score.final_score ?? null,
                       variance: d?.recommended?.score.projected_variance ?? null,
                       confidence: d?.recommended?.score.confidence ?? null,
+                      swapGain:
+                        d && !d.matches_current && d.recommended && d.current_starter_score
+                          ? d.recommended.score.projected_mean -
+                            d.current_starter_score.projected_mean
+                          : null,
                     }}
                   />
                 )
@@ -504,7 +544,7 @@ function SessionView({
             <ol className="space-y-3 text-sm text-ink-10 leading-relaxed">
               <li className="flex gap-3">
                 <span className="stamp text-[10px] text-[var(--color-signal)] shrink-0 pt-0.5">01</span>
-                <span>The lineup updates as you move the risk slider. Each slot shows the model's top pick.</span>
+                <span>The lineup updates as you move the risk slider or switch the scoring model. Each slot shows the model's top pick; <span className="text-ink-12 font-medium">SWAP +N</span> is the projected points gained by benching your current starter for it.</span>
               </li>
               <li className="flex gap-3">
                 <span className="stamp text-[10px] text-[var(--color-signal)] shrink-0 pt-0.5">02</span>
@@ -539,6 +579,7 @@ function SessionView({
         slotId={activeSlotId}
         risk={debouncedRisk}
         pool={pool}
+        model={model}
         onPoolChange={setPool}
         pinnedPlayerId={activeSlotId ? (pins[activeSlotId]?.player.player_id ?? null) : null}
         onPin={(c) => {
@@ -576,10 +617,12 @@ function Divider() {
 function ProjectionCard({
   total,
   stddev,
+  edge,
   loading,
 }: {
   total: number | null
   stddev: number | null
+  edge: number | null
   loading: boolean
 }) {
   return (
@@ -601,6 +644,15 @@ function ProjectionCard({
       {stddev !== null && (
         <div className="mt-1.5 stamp text-[10px] text-ink-8">
           ± {stddev.toFixed(1)} STDDEV
+        </div>
+      )}
+      {edge !== null && edge > 0.05 && (
+        <div
+          className="mt-1.5 stamp text-[10px]"
+          style={{ color: 'color-mix(in oklch, var(--color-good) 85%, white)' }}
+          title="Projected points gained by making the recommended swaps instead of keeping your current Sleeper starters"
+        >
+          +{edge.toFixed(1)} VS YOUR CURRENT LINEUP
         </div>
       )}
     </div>

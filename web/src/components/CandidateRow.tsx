@@ -76,8 +76,17 @@ export function CandidateRow({
               <Metric value={`±${score.projected_variance.toFixed(2)}`} label="VARIANCE" muted />
             </div>
 
-            <div className="mt-4">
+            <div className="mt-4 flex items-center gap-2 flex-wrap">
               <ConfidencePill confidence={score.confidence} />
+              {score.notes.map((note) => (
+                <span
+                  key={note}
+                  className="stamp text-[9px] px-2 py-1 rounded-xs bg-ink-3 text-ink-9 border hairline"
+                  title="Why the model scored it this way"
+                >
+                  {note.toUpperCase()}
+                </span>
+              ))}
             </div>
           </div>
         </div>
