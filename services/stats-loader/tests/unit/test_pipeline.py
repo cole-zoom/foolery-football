@@ -10,7 +10,7 @@ import pytest
 from stats_loader.clients.http import HttpError, NotFoundError
 from stats_loader.core import pipeline
 from stats_loader.types import NflState
-from tests.unit.fakes import FakeHttp, FakeWriter, make_players, make_weekly
+from tests.unit.fakes import FakeHttp, FakeWriter, make_players, make_schedule, make_weekly
 
 
 def _now() -> datetime:
@@ -25,6 +25,7 @@ def _routes_for_state(season: int, week: int) -> dict[str, Any]:
     routes: dict[str, Any] = {
         "/v1/state/nfl": {"season": season, "week": week},
         "/v1/players/nfl": players,
+        f"/schedule/nfl/regular/{season}": make_schedule(),
     }
     for w in range(1, week):
         routes[f"/v1/stats/nfl/regular/{season}/{w}"] = make_weekly(pids)
@@ -47,6 +48,9 @@ def test_midseason_run_writes_expected_artifacts() -> None:
     )
 
     assert "players.json" in writer.artifacts
+    assert "schedule.json" in writer.artifacts
+    assert writer.committed_manifest is not None
+    assert "schedule" in writer.committed_manifest["sources"]  # type: ignore[operator]
     for w in range(1, 5):
         assert f"stats_week_{w}.json" in writer.artifacts
         assert f"projections_week_{w}.json" in writer.artifacts
@@ -134,6 +138,27 @@ def test_week_1_tolerates_missing_prior_season() -> None:
     )
 
     assert "stats_prior_season.json" not in writer.artifacts
+
+
+def test_missing_schedule_is_a_soft_miss() -> None:
+    """A 404 on the schedule endpoint must not fail the whole run."""
+
+    routes = _routes_for_state(2026, 3)
+    routes["/schedule/nfl/regular/2026"] = NotFoundError("404")
+    http = FakeHttp(routes)
+    writer = FakeWriter()
+
+    pipeline.run(
+        http=http,
+        writer_factory=lambda _season: writer,
+        state_override=None,
+        now=_now(),
+        dry_run=False,
+    )
+
+    assert "schedule.json" not in writer.artifacts
+    assert writer.committed_manifest is not None
+    assert "schedule" not in writer.committed_manifest["sources"]  # type: ignore[operator]
 
 
 def test_pipeline_aborts_on_http_error_for_past_week() -> None:

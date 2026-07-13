@@ -41,3 +41,5 @@ infra/terraform.tfvars
 infra/*.tfstate
 infra/*.tfstate.backup
 infra/*.tfplan
+
+docs/pdfs/

@@ -6,7 +6,7 @@ import pytest
 
 from stats_loader.providers import sleeper
 from stats_loader.providers.sleeper import SchemaError
-from tests.unit.fakes import make_players, make_weekly
+from tests.unit.fakes import make_players, make_schedule, make_weekly
 
 
 def test_validate_state_accepts_well_formed() -> None:
@@ -72,3 +72,30 @@ def test_validate_weekly_allows_empty_current_week() -> None:
 def test_validate_weekly_keeps_payload_verbatim() -> None:
     payload = make_weekly(["1000", "1001"])
     assert sleeper.validate_weekly(payload, label="x", allow_empty=False) is payload
+
+
+def test_validate_schedule_keeps_payload_verbatim() -> None:
+    payload = make_schedule()
+    assert sleeper.validate_schedule(payload, label="schedule") is payload
+
+
+def test_validate_schedule_rejects_non_list() -> None:
+    with pytest.raises(SchemaError, match="expected array"):
+        sleeper.validate_schedule({"week": 1}, label="schedule")
+
+
+def test_validate_schedule_rejects_empty() -> None:
+    with pytest.raises(SchemaError, match="empty schedule"):
+        sleeper.validate_schedule([], label="schedule")
+
+
+def test_validate_schedule_rejects_all_games_malformed() -> None:
+    payload = [{"date": "2026-09-13"}, {"week": "one", "home": "KC", "away": "BUF"}]
+    with pytest.raises(SchemaError, match="no game has week/home/away"):
+        sleeper.validate_schedule(payload, label="schedule")
+
+
+def test_validate_schedule_tolerates_some_malformed_games() -> None:
+    payload = make_schedule()
+    payload.append({"date": "2026-09-13"})  # no week/home/away
+    assert sleeper.validate_schedule(payload, label="schedule") is payload
