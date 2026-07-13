@@ -105,6 +105,11 @@ class SlotDecisionOut(BaseModel):
     recommended: CandidateOut | None
     current_starter: PlayerOut | None
     matches_current: bool
+    # The current starter's own score under the same model/risk/settings.
+    # Lets the UI quantify a SWAP: "starting X over Y projects +N pts".
+    # None when there's no current starter or they weren't scoreable
+    # (e.g. already recommended into an earlier slot).
+    current_starter_score: ScoreOut | None = None
 
 
 class DecisionsOut(BaseModel):

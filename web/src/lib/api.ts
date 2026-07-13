@@ -71,6 +71,13 @@ const PoolSchema = z.enum(['roster', 'waivers', 'both'])
 export type Pool = z.infer<typeof PoolSchema>
 export type Confidence = z.infer<typeof ConfidenceSchema>
 
+/** Registered scoring models (decision-engine core/scoring MODELS). */
+export const MODELS = [
+  { value: 'context', label: 'Context (regression)' },
+  { value: 'naive', label: 'Naive baseline' },
+] as const
+export type Model = (typeof MODELS)[number]['value']
+
 export const ScoreSchema = z.object({
   projected_mean: z.number(),
   projected_variance: z.number(),
@@ -107,6 +114,8 @@ export const SlotDecisionSchema = z.object({
   recommended: CandidateSchema.nullable(),
   current_starter: PlayerSchema.nullable(),
   matches_current: z.boolean(),
+  // Optional so the UI keeps working against a backend that predates it.
+  current_starter_score: ScoreSchema.nullable().optional(),
 })
 export type SlotDecision = z.infer<typeof SlotDecisionSchema>
 
@@ -203,6 +212,7 @@ export const api = {
     risk?: number
     pool?: Pool
     limit?: number
+    model?: Model
     season?: number
     week?: number
     prefer_team?: string
@@ -213,6 +223,7 @@ export const api = {
     user: string
     risk?: number
     pool?: Pool
+    model?: Model
     season?: number
     week?: number
     prefer_team?: string

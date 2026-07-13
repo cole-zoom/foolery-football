@@ -28,6 +28,8 @@ export function SlotCard({
     score: number | null
     variance: number | null
     confidence: 'low' | 'medium' | 'high' | null
+    /** Projected points gained by swapping to the recommendation (null when match/unknown). */
+    swapGain: number | null
   }
   /** A player the user has explicitly chosen for this slot (overrides recommendation). */
   pinned: { player: Player; score: number } | null
@@ -115,7 +117,10 @@ export function SlotCard({
                 {status === 'pinned' && <PinnedBadge />}
                 {status === 'match' && <MatchBadge />}
                 {status === 'swap' && (
-                  <SwapBadge currentName={decision.current_player?.full_name ?? null} />
+                  <SwapBadge
+                    currentName={decision.current_player?.full_name ?? null}
+                    gain={decision.swapGain}
+                  />
                 )}
               </div>
             </>
@@ -231,7 +236,19 @@ function MatchBadge() {
   )
 }
 
-function SwapBadge({ currentName }: { currentName: string | null }) {
+function SwapBadge({
+  currentName,
+  gain,
+}: {
+  currentName: string | null
+  gain: number | null
+}) {
+  const title = [
+    currentName ? `Currently starting ${currentName}` : null,
+    gain !== null ? `swapping projects ${gain >= 0 ? '+' : ''}${gain.toFixed(1)} pts` : null,
+  ]
+    .filter(Boolean)
+    .join(' — ')
   return (
     <span
       className="stamp text-[8px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-xs ml-1"
@@ -240,10 +257,15 @@ function SwapBadge({ currentName }: { currentName: string | null }) {
         color: 'color-mix(in oklch, var(--color-signal) 85%, white)',
         boxShadow: 'inset 0 0 0 1px color-mix(in oklch, var(--color-signal) 30%, transparent)',
       }}
-      title={currentName ? `Currently starting ${currentName}` : undefined}
+      title={title || undefined}
     >
       <ArrowRightLeft size={9} strokeWidth={2.5} />
       SWAP
+      {gain !== null && (
+        <span className="nums font-semibold">
+          {gain >= 0 ? '+' : ''}{gain.toFixed(1)}
+        </span>
+      )}
     </span>
   )
 }
