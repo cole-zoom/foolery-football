@@ -141,12 +141,17 @@ def run(
 
     pool_player_ids = _build_pool(league_context, snapshot, request.pool)
     excluded = request.exclude_player_ids or frozenset()
+    # Bye filter: the season schedule is known upfront, so a player whose
+    # team has no week-``state.week`` game can only score zero. Applies
+    # to live recommendations and replays alike.
+    week_games = snapshot.schedule.get(state.week) or None
     eligible: list[Player] = [
         snapshot.players[pid]
         for pid in pool_player_ids
         if pid not in excluded
         and pid in snapshot.players
         and player_eligible_for_slot(snapshot.players[pid], request.slot)
+        and _plays_in_week(snapshot.players[pid], week_games)
     ]
     log.info(
         "Pool=%s slot=%s -> %d eligible candidates (of %d pooled)",
@@ -212,6 +217,21 @@ def _build_pool(
     # both
     rostered_others = ctx.all_rostered_player_ids - set(ctx.user_roster.players)
     return [pid for pid in snapshot.players if pid not in rostered_others]
+
+
+def _plays_in_week(player: Player, week_games: dict[str, str] | None) -> bool:
+    """False only when the schedule positively shows a bye.
+
+    ``week_games`` is the snapshot schedule's team -> opponent map for
+    the target week, or None when the schedule can't say (pre-schedule
+    snapshot, or a week outside the regular season). Unknown weeks and
+    team-less players (free agents mid-move) are kept — quarantine over
+    drop, same as everywhere else.
+    """
+
+    if week_games is None or player.team is None:
+        return True
+    return player.team in week_games
 
 
 def _snapshot_as_of(snapshot: SnapshotData, week: int) -> SnapshotData:

@@ -7,6 +7,7 @@ import pytest
 from decision_engine.providers.sleeper import (
     SchemaError,
     validate_league,
+    validate_matchups,
     validate_rosters,
     validate_state,
     validate_user,
@@ -112,3 +113,50 @@ def test_validate_rosters_quarantines_bad_entries() -> None:
     assert rosters[0].players == ("p1", "p2")
     assert rosters[1].players == ("p3",)
     assert rosters[1].starters == ("p3",)
+
+
+def test_validate_matchups_happy_path() -> None:
+    matchups = validate_matchups(
+        [
+            {
+                "roster_id": 1,
+                "matchup_id": 7,
+                "players": ["p1", "p2", "p3"],
+                "starters": ["p1", "p2"],
+                "points": 123.46,
+            },
+            {
+                "roster_id": 2,
+                "matchup_id": 7,
+                "players": ["p4"],
+                "starters": ["p4"],
+                "points": 98,  # Sleeper sometimes ships ints
+            },
+        ]
+    )
+    assert len(matchups) == 2
+    assert matchups[0].roster_id == 1
+    assert matchups[0].starters == ("p1", "p2")
+    assert matchups[0].points == 123.46
+    assert matchups[1].points == 98.0
+
+
+def test_validate_matchups_quarantines_bad_entries() -> None:
+    matchups = validate_matchups(
+        [
+            {"roster_id": 1, "players": ["p1", 42, None], "starters": ["p1"]},
+            {"players": ["p2"]},  # missing roster_id -> dropped
+            "garbage",  # not a dict -> dropped
+            {"roster_id": 3, "matchup_id": "x", "points": True},  # coerced to None
+        ]
+    )
+    assert len(matchups) == 2
+    assert matchups[0].players == ("p1",)
+    assert matchups[1].matchup_id is None
+    assert matchups[1].points is None
+    assert matchups[1].players == ()
+
+
+def test_validate_matchups_rejects_non_list() -> None:
+    with pytest.raises(SchemaError):
+        validate_matchups({"roster_id": 1})

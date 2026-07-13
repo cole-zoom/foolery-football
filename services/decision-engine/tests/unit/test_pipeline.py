@@ -296,6 +296,67 @@ def test_exclude_all_eligible_yields_empty_candidates() -> None:
     assert result.candidates == ()
 
 
+def _snapshot_with_schedule(schedule: dict[int, dict[str, str]]) -> SnapshotData:
+    base = _snapshot_with_history()
+    return base.model_copy(update={"schedule": schedule})
+
+
+def test_bye_week_team_is_filtered_from_candidates() -> None:
+    """p1's team (DET) has no week-3 game -> p1 can only score zero and
+    must not be recommended; p2 (CHI, playing) stays."""
+
+    snap = _snapshot_with_schedule({3: {"CHI": "GB", "GB": "CHI"}})
+    http = FakeHttp(league_routes(user_roster_players=("p1", "p2")))
+    reader = FakeSnapshotReader(snap)
+
+    result = pipeline.run(
+        http=http,
+        snapshot_reader=reader,
+        request=_make_request(slot="FLEX", pool="roster"),
+    )
+    pids = {c.player.player_id for c in result.candidates}
+    assert pids == {"p2"}
+
+
+def test_bye_filter_skips_weeks_the_schedule_does_not_cover() -> None:
+    """Schedule present but without the target week (e.g. legacy artifact
+    or postseason) -> nobody gets filtered."""
+
+    snap = _snapshot_with_schedule({1: {"DET": "CHI", "CHI": "DET"}})
+    http = FakeHttp(league_routes(user_roster_players=("p1", "p2")))
+    reader = FakeSnapshotReader(snap)
+
+    result = pipeline.run(
+        http=http,
+        snapshot_reader=reader,
+        request=_make_request(slot="FLEX", pool="roster"),
+    )
+    pids = {c.player.player_id for c in result.candidates}
+    assert pids == {"p1", "p2"}
+
+
+def test_bye_filter_keeps_players_without_a_team() -> None:
+    """A team-less player (mid-move free agent) can't be proven on bye —
+    quarantine over drop keeps them scoreable."""
+
+    snap = _snapshot_with_history()
+    players = dict(snap.players)
+    players["p1"] = players["p1"].model_copy(update={"team": None})
+    snap = snap.model_copy(
+        update={"players": players, "schedule": {3: {"CHI": "GB", "GB": "CHI"}}}
+    )
+    http = FakeHttp(league_routes(user_roster_players=("p1", "p2")))
+    reader = FakeSnapshotReader(snap)
+
+    result = pipeline.run(
+        http=http,
+        snapshot_reader=reader,
+        request=_make_request(slot="FLEX", pool="roster"),
+    )
+    pids = {c.player.player_id for c in result.candidates}
+    assert pids == {"p1", "p2"}
+
+
 def test_state_override_skips_state_call() -> None:
     snap = _snapshot_with_history()
     routes = league_routes()

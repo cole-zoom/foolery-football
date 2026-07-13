@@ -22,7 +22,9 @@ eligible players, and print them ranked.
 3. Read the latest `data/snapshots/<date>/` folder for player
    metadata, weekly stats, and projections.
 4. Filter the candidate pool to `--slot`-eligible players in
-   `--pool`.
+   `--pool`, dropping players whose team has no game in the target
+   week (bye, per the snapshot's season schedule; weeks the schedule
+   doesn't cover skip the filter).
 5. For each candidate, compute:
    - `projection_mean` — see [scoring model PRD](../product-specs/milestone-2/2.2-scoring-model.md).
    - `projection_variance` — stddev across prior weeks.

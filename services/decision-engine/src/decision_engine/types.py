@@ -104,6 +104,26 @@ class Roster(BaseModel):
     starters: tuple[str, ...] = ()
 
 
+class Matchup(BaseModel):
+    """One entry from ``/v1/league/<id>/matchups/<week>``.
+
+    The matchup archive is the only Sleeper endpoint that records a
+    roster *as it stood in that week* — ``players``/``starters`` here
+    are historical, unlike ``/rosters`` which always returns current
+    state. ``points`` is Sleeper's own total for the week, kept as a
+    cross-check; we recompute points from snapshot stats so model and
+    actual are measured with the same math.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    roster_id: int
+    matchup_id: int | None = None
+    players: tuple[str, ...] = ()
+    starters: tuple[str, ...] = ()
+    points: float | None = None
+
+
 class LeagueContext(BaseModel):
     """Everything pipeline needs from the live Sleeper league fetch."""
 

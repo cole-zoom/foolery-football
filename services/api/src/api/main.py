@@ -18,7 +18,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api import errors
 from api.config import load_settings
-from api.routers import context, decide, decisions, leagues, players, state
+from api.routers import (
+    comparison,
+    context,
+    decide,
+    decisions,
+    leagues,
+    players,
+    state,
+)
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +58,7 @@ def create_app() -> FastAPI:
     app.include_router(context.router)
     app.include_router(decide.router)
     app.include_router(decisions.router)
+    app.include_router(comparison.router)
     app.include_router(players.router)
 
     @app.get("/health", tags=["meta"])

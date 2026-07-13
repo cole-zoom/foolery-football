@@ -69,5 +69,5 @@ uv run decide --user <username> --league <league_id> --slot FLEX --risk 0.3
   [`docs/references/sleeper-api.md`](../../docs/references/sleeper-api.md).
   Decision engine uses: `/v1/state/nfl`, `/v1/user/<username>`,
   `/v1/user/<id>/leagues/nfl/<season>`, `/v1/league/<id>`,
-  `/v1/league/<id>/rosters`.
+  `/v1/league/<id>/rosters`, `/v1/league/<id>/matchups/<week>`.
 - Retries match stats-loader: 3 attempts on 429 / 5xx, no retry on 4xx.

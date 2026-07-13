@@ -16,6 +16,7 @@ import logging
 from decision_engine.types import (
     League,
     LeagueSummary,
+    Matchup,
     NflState,
     Roster,
     SleeperUser,
@@ -145,6 +146,42 @@ def validate_rosters(payload: object) -> list[Roster]:
                 owner_id=str(owner_id) if isinstance(owner_id, str) else None,
                 players=tuple(str(p) for p in players if isinstance(p, str)),
                 starters=tuple(str(p) for p in starters if isinstance(p, str)),
+            )
+        )
+    return out
+
+
+def validate_matchups(payload: object) -> list[Matchup]:
+    """Validate ``/v1/league/<id>/matchups/<week>``."""
+
+    if not isinstance(payload, list):
+        raise SchemaError(
+            f"/v1/league/matchups: expected list, got {type(payload).__name__}"
+        )
+    out: list[Matchup] = []
+    for i, entry in enumerate(payload):
+        if not isinstance(entry, dict):
+            log.warning("matchups entry %d not an object; skipping", i)
+            continue
+        roster_id = entry.get("roster_id")
+        if not isinstance(roster_id, int):
+            log.warning("matchups entry %d missing int roster_id; skipping", i)
+            continue
+        matchup_id = entry.get("matchup_id")
+        points = entry.get("points")
+        players = entry.get("players") or ()
+        starters = entry.get("starters") or ()
+        out.append(
+            Matchup(
+                roster_id=roster_id,
+                matchup_id=matchup_id if isinstance(matchup_id, int) else None,
+                players=tuple(p for p in players if isinstance(p, str)),
+                starters=tuple(s for s in starters if isinstance(s, str)),
+                points=(
+                    float(points)
+                    if isinstance(points, int | float) and not isinstance(points, bool)
+                    else None
+                ),
             )
         )
     return out

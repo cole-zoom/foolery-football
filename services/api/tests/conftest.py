@@ -90,6 +90,7 @@ def make_snapshot(
     season: int,
     weeks_included: tuple[int, ...],
     snapshot_dir: str = "/fake/snapshot",
+    schedule: dict[int, dict[str, str]] | None = None,
 ) -> SnapshotData:
     return SnapshotData(
         snapshot_dir=snapshot_dir,
@@ -100,6 +101,7 @@ def make_snapshot(
         players=players,
         weekly_stats=weekly_stats,
         prior_season_stats={},
+        schedule=schedule or {},
     )
 
 

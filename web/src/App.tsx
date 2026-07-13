@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Database, LayoutDashboard, Loader2, RotateCcw, TrendingUp } from 'lucide-react'
+import { Database, LayoutDashboard, Loader2, RotateCcw, Swords, TrendingUp } from 'lucide-react'
 import { api, MODELS, type Candidate, type Model, type Pool, type SlotDecision } from '@/lib/api'
+import { ComparisonView } from '@/components/ComparisonView'
 import { EntryForm } from '@/components/EntryForm'
 import { FieldSelect } from '@/components/FieldSelect'
 import { RiskKnob } from '@/components/RiskKnob'
@@ -21,6 +22,7 @@ type Session = {
 }
 
 type PinnedPick = { player: Candidate['player']; score: number }
+type View = 'lineup' | 'comparison'
 
 const REGULAR_SEASON_LAST_WEEK = 18
 const RISK_DEBOUNCE_MS = 400
@@ -36,6 +38,7 @@ export default function App() {
   const [prefer, setPrefer] = useState<string | null>(null)
   const [avoid, setAvoid] = useState<string | null>(null)
   const [pins, setPins] = useState<Record<string, PinnedPick>>({})
+  const [view, setView] = useState<View>('lineup')
 
   if (!session) {
     return <EntryForm onSubmit={(s) => { setSession(s); setWeek(null); setPins({}) }} />
@@ -52,6 +55,7 @@ export default function App() {
         setPrefer(null)
         setAvoid(null)
         setPins({})
+        setView('lineup')
       }}
       activeSlotId={activeSlotId}
       setActiveSlotId={setActiveSlotId}
@@ -71,6 +75,8 @@ export default function App() {
       onSessionChange={setSession}
       pins={pins}
       setPins={setPins}
+      view={view}
+      setView={setView}
     />
   )
 }
@@ -96,6 +102,8 @@ function SessionView({
   onSessionChange,
   pins,
   setPins,
+  view,
+  setView,
 }: {
   session: Session
   onReset: () => void
@@ -117,6 +125,8 @@ function SessionView({
   onSessionChange: (s: Session) => void
   pins: Record<string, PinnedPick>
   setPins: React.Dispatch<React.SetStateAction<Record<string, PinnedPick>>>
+  view: View
+  setView: (v: View) => void
 }) {
   // Debounce the slider so the API only fires when the user pauses.
   const debouncedRisk = useDebouncedValue(risk, RISK_DEBOUNCE_MS)
@@ -340,6 +350,20 @@ function SessionView({
                 {ctx?.league.name ?? '…'}
               </span>
             </div>
+            <div className="flex items-center rounded-md border hairline bg-ink-2 p-0.5 ml-3">
+              <ViewTab
+                active={view === 'lineup'}
+                onClick={() => setView('lineup')}
+                icon={<LayoutDashboard size={11} />}
+                label="LINEUP"
+              />
+              <ViewTab
+                active={view === 'comparison'}
+                onClick={() => setView('comparison')}
+                icon={<Swords size={11} />}
+                label="MODEL VS YOU"
+              />
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -358,21 +382,23 @@ function SessionView({
                 setPins({})
               }}
             />
-            <FieldSelect
-              label="POOL"
-              value={pool}
-              onChange={(v) => {
-                setPool(v as Pool)
-                setPins({})
-              }}
-              options={[
-                { value: 'roster', label: 'My roster' },
-                { value: 'both', label: 'Roster + waivers' },
-                { value: 'waivers', label: 'Waivers only' },
-              ]}
-              size="sm"
-              triggerClassName="min-w-[150px]"
-            />
+            {view === 'lineup' && (
+              <FieldSelect
+                label="POOL"
+                value={pool}
+                onChange={(v) => {
+                  setPool(v as Pool)
+                  setPins({})
+                }}
+                options={[
+                  { value: 'roster', label: 'My roster' },
+                  { value: 'both', label: 'Roster + waivers' },
+                  { value: 'waivers', label: 'Waivers only' },
+                ]}
+                size="sm"
+                triggerClassName="min-w-[150px]"
+              />
+            )}
             <FieldSelect
               label="MODEL"
               value={model}
@@ -390,11 +416,13 @@ function SessionView({
             <div className="flex flex-col gap-1.5">
               <span className="stamp text-[10px] text-ink-7 leading-none">CONTROLS</span>
               <div className="flex items-center gap-1.5">
-                <TeamPrefs
-                  prefer={prefer}
-                  avoid={avoid}
-                  onChange={setPrefs}
-                />
+                {view === 'lineup' && (
+                  <TeamPrefs
+                    prefer={prefer}
+                    avoid={avoid}
+                    onChange={setPrefs}
+                  />
+                )}
                 <ThemeToggle />
                 <button
                   onClick={onReset}
@@ -411,6 +439,17 @@ function SessionView({
       </header>
 
       {/* Main */}
+      {view === 'comparison' ? (
+        <ComparisonView
+          user={session.username}
+          leagueId={session.leagueId}
+          season={session.season}
+          week={week}
+          model={model}
+          risk={debouncedRisk}
+          onViewPlayer={setOpenPlayerId}
+        />
+      ) : (
       <main className="flex-1 max-w-[1400px] mx-auto w-full px-8 py-10 grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-10">
         <section>
           <div className="mb-7 flex items-end justify-between gap-6">
@@ -568,6 +607,7 @@ function SessionView({
           )}
         </aside>
       </main>
+      )}
 
       <RecommendationPanel
         open={!!activeSlotId}
@@ -612,6 +652,34 @@ function SessionView({
 
 function Divider() {
   return <div className="h-9 w-px bg-[var(--color-ink-5)] mt-5" />
+}
+
+function ViewTab({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  label: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'h-7 px-2.5 rounded-[5px] stamp text-[10px] flex items-center gap-1.5 transition whitespace-nowrap',
+        active
+          ? 'bg-ink-4 text-ink-12 shadow-[inset_0_0_0_1px_var(--color-ink-6)]'
+          : 'text-ink-8 hover:text-ink-11',
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  )
 }
 
 function ProjectionCard({

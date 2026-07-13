@@ -104,6 +104,11 @@ Design decisions worth knowing:
 - **Both risk handling and uncertainty are explicit.** Every score is a
   mean, a spread, and a confidence tier; the user's risk slider maps
   onto `mean + (risk − 0.5) · 2 · spread`.
+- **Bye weeks are filtered structurally, not predicted.** The season
+  schedule ships in every snapshot, so any player whose team has no
+  game in the target week is dropped from the candidate pool before
+  scoring — live weeks and replays alike. Injury scratches remain the
+  models' blind spot; the schedule can't see those.
 - **Ship gate.** `scripts/backtest-models.py` replays a season
   week-by-week (each week predicted from strictly-prior data) and
   compares models on MAE, startable-player MAE, and top-K precision.
@@ -136,6 +141,13 @@ recommended lineup — none is cosmetic:
   believes in or not.
 - **Per-slot pins** — override any recommendation; totals recompute
   around the override.
+- **Model vs. you (hindsight) view** — for any completed week, the
+  lineup the model would have fielded (replayed leakage-safe) beside
+  the lineup you actually started, both scored by real results. Comes
+  with the model's report card: per-player predicted-vs-actual errors,
+  MAE, signed bias, and the perfect-hindsight lineup ("points left on
+  the bench"). The week-W roster comes from Sleeper's matchup archive,
+  so mid-season trades don't leak into the replay.
 
 Decision-tied readouts: each slot shows **MATCH** (your starter is
 already optimal) or **SWAP +N** (projected points gained by benching
