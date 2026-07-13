@@ -237,3 +237,66 @@ def test_unknown_model_is_a_400(make_client) -> None:
     )
     assert resp.status_code == 400
     assert "unknown scoring model" in resp.json()["error"]
+
+
+def test_swap_includes_current_starter_score(make_client) -> None:
+    """A SWAP slot carries the current starter's own score so the UI can
+    show the projected cost of not swapping."""
+
+    players = {
+        "wr_strong": make_player("wr_strong", full_name="Strong WR",
+                                 position="WR", fantasy_positions=("WR",), team="LAR"),
+        "wr_weak": make_player("wr_weak", full_name="Weak WR",
+                               position="WR", fantasy_positions=("WR",), team="GB"),
+    }
+    weekly = {
+        1: {"wr_strong": {"rec_yd": 200.0, "rec": 10.0},
+            "wr_weak": {"rec_yd": 20.0, "rec": 1.0}},
+        2: {"wr_strong": {"rec_yd": 220.0, "rec": 11.0},
+            "wr_weak": {"rec_yd": 25.0, "rec": 2.0}},
+    }
+    season = 2026
+    snap = make_snapshot(players=players, weekly_stats=weekly, season=season,
+                        weeks_included=(1, 2))
+    http = FakeHttp(
+        league_routes(
+            season=season,
+            state_season=season,
+            state_week=3,
+            user_roster_players=("wr_strong", "wr_weak"),
+            user_roster_starters=("wr_weak",),
+            roster_positions=("WR", "BN"),
+        )
+    )
+    client = make_client(http=http, snapshots={season: snap})
+    body = client.get(
+        "/leagues/L1/decisions",
+        params={"user": "cole", "season": 2026, "week": 3, "pool": "roster"},
+    ).json()
+    wr_slot = next(d for d in body["decisions"] if d["slot_id"] == "WR1")
+
+    assert wr_slot["matches_current"] is False
+    starter_score = wr_slot["current_starter_score"]
+    assert starter_score is not None
+    assert (
+        wr_slot["recommended"]["score"]["projected_mean"]
+        > starter_score["projected_mean"]
+    )
+
+
+def test_match_slot_starter_score_equals_recommendation(make_client) -> None:
+    http, snaps = _basic_setup(
+        user_roster_starters=("qb1", "rb1", "rb2", "wr1", "wr2", "te1", "wr3"),
+    )
+    client = make_client(http=http, snapshots=snaps)
+    body = client.get(
+        "/leagues/L1/decisions",
+        params={"user": "cole", "season": 2026, "week": 3, "pool": "roster"},
+    ).json()
+    matched = [d for d in body["decisions"] if d["matches_current"]]
+    assert matched
+    for d in matched:
+        assert d["current_starter_score"] is not None
+        assert d["current_starter_score"]["projected_mean"] == pytest.approx(
+            d["recommended"]["score"]["projected_mean"]
+        )

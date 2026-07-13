@@ -37,6 +37,11 @@ from api.schemas import (
 router = APIRouter(tags=["decisions"])
 
 REGULAR_SEASON_LAST_WEEK = 18
+# Effectively "return every scored candidate". The pipeline scores the
+# whole eligible pool regardless of limit — limit only truncates the
+# output — and we need more than the #1 pick here: the current
+# starter's own score is what quantifies a SWAP for the UI.
+CANDIDATE_SEARCH_LIMIT = 10_000
 
 
 @router.get("/leagues/{league_id}/decisions", response_model=DecisionsOut)
@@ -107,7 +112,7 @@ def get_decisions(
             slot=slot,
             risk=risk,
             pool=cast(Pool, pool),
-            limit=1,
+            limit=CANDIDATE_SEARCH_LIMIT,
             model=model,
             prefer_team=prefer,
             avoid_team=avoid,
@@ -133,6 +138,13 @@ def get_decisions(
             sum_mean += top_candidate.score.projected_mean
             sum_variance += top_candidate.score.projected_variance ** 2
 
+        current_candidate = None
+        if current_pid is not None:
+            current_candidate = next(
+                (c for c in result.candidates if c.player.player_id == current_pid),
+                None,
+            )
+
         decisions.append(
             SlotDecisionOut(
                 slot_id=slot_id,
@@ -147,6 +159,9 @@ def get_decisions(
                     top_candidate is not None
                     and current_pid is not None
                     and top_candidate.player.player_id == current_pid
+                ),
+                current_starter_score=(
+                    _to_score_out(current_candidate) if current_candidate else None
                 ),
             )
         )
@@ -176,16 +191,20 @@ def _to_candidate_out(c, base: str) -> CandidateOut:
         rank=1,
         recommended=True,
         player=player_to_wire(c.player, headshot_base=base),
-        score=ScoreOut(
-            projected_mean=c.score.projected_mean,
-            projected_variance=c.score.projected_variance,
-            risk_adjusted_score=c.score.risk_adjusted_score,
-            final_score=c.final_score,
-            confidence=c.score.confidence,
-            notes=list(c.score.notes),
-            preference_note=c.preference_note,
-            on_user_roster=c.on_user_roster,
-        ),
+        score=_to_score_out(c),
+    )
+
+
+def _to_score_out(c) -> ScoreOut:
+    return ScoreOut(
+        projected_mean=c.score.projected_mean,
+        projected_variance=c.score.projected_variance,
+        risk_adjusted_score=c.score.risk_adjusted_score,
+        final_score=c.final_score,
+        confidence=c.score.confidence,
+        notes=list(c.score.notes),
+        preference_note=c.preference_note,
+        on_user_roster=c.on_user_roster,
     )
 
 
