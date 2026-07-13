@@ -33,6 +33,13 @@ class ScoreFn(Protocol):
 
 
 class ScoreModelFactory(Protocol):
-    """Builds a ``ScoreFn`` from the snapshot. Called once per run."""
+    """Builds a ``ScoreFn`` from the snapshot.
+
+    Results are cached across requests (``scoring.build_score_fn``), so
+    the returned closure must capture only *derived* values (priors,
+    feature tables), never the ``SnapshotData`` itself — otherwise the
+    cache pins whole snapshots in memory after the season cache has
+    evicted them.
+    """
 
     def __call__(self, snapshot: SnapshotData) -> ScoreFn: ...

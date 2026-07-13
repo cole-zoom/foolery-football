@@ -20,7 +20,7 @@ from decision_engine.core.league_fetch import (
     fetch_league_context,
     resolve_state,
 )
-from decision_engine.core.scoring import get_model
+from decision_engine.core.scoring import build_score_fn
 from decision_engine.types import (
     LeagueContext,
     NflState,
@@ -135,7 +135,9 @@ def run(
             season=state.season,
         )
 
-    score_fn = get_model(request.model)(snapshot)
+    # Cached per (model, trimmed snapshot): repeat requests that only
+    # change preferences (risk, bias, pool) skip the factory precompute.
+    score_fn = build_score_fn(request.model, snapshot)
 
     pool_player_ids = _build_pool(league_context, snapshot, request.pool)
     excluded = request.exclude_player_ids or frozenset()
