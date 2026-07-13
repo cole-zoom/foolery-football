@@ -104,6 +104,11 @@ Design decisions worth knowing:
 - **Both risk handling and uncertainty are explicit.** Every score is a
   mean, a spread, and a confidence tier; the user's risk slider maps
   onto `mean + (risk − 0.5) · 2 · spread`.
+- **Bye weeks are filtered structurally, not predicted.** The season
+  schedule ships in every snapshot, so any player whose team has no
+  game in the target week is dropped from the candidate pool before
+  scoring — live weeks and replays alike. Injury scratches remain the
+  models' blind spot; the schedule can't see those.
 - **Ship gate.** `scripts/backtest-models.py` replays a season
   week-by-week (each week predicted from strictly-prior data) and
   compares models on MAE, startable-player MAE, and top-K precision.

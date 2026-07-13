@@ -183,6 +183,31 @@ def test_missing_matchup_is_a_400(make_client) -> None:
     assert "matchup" in resp.json()["error"]
 
 
+def test_bye_starter_unprojected_and_model_picks_playing_player(make_client) -> None:
+    """The human started the strong WR on his bye week (LAR idle in the
+    schedule, no week-3 stat row). The model must field the playing WR
+    instead, and the bye starter carries neither projection nor actual."""
+
+    routes = _routes(matchup_starters=("wr_strong",))
+    weekly = _weekly()
+    del weekly[3]["wr_strong"]  # bye: no stat row that week
+    snap = make_snapshot(
+        players=_players(),
+        weekly_stats=weekly,
+        season=SEASON,
+        weeks_included=(1, 2, 3),
+        schedule={3: {"GB": "CHI", "CHI": "GB", "PIT": "DAL", "DAL": "PIT"}},
+    )
+    client = make_client(http=FakeHttp(routes), snapshots={SEASON: snap})
+    body = _get(client).json()
+
+    wr = next(s for s in body["slots"] if s["slot_id"] == "WR1")
+    assert wr["model_pick"]["player"]["player_id"] == "wr_weak"
+    assert wr["actual_starter"]["player"]["player_id"] == "wr_strong"
+    assert wr["actual_starter"]["predicted_mean"] is None
+    assert wr["actual_starter"]["actual_points"] is None
+
+
 def test_perfect_lineup_respects_eligibility_and_uniqueness(make_client) -> None:
     """Two WR slots + FLEX: perfect total must not reuse a player and must
     put the best eligible actuals in each slot."""
