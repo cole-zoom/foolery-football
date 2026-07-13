@@ -9,11 +9,11 @@ from __future__ import annotations
 from collections import Counter
 
 from decision_engine.core.eligibility import NON_SELECTABLE_SLOTS
-from decision_engine.core.league_fetch import fetch_league_context, resolve_state
 from decision_engine.types import LeagueContext, Player
 from fastapi import APIRouter, Query
 from ffdm_app.types import LiveState
 
+from api import live_cache
 from api.deps import (
     HttpClientDep,
     PrepareSeasonDep,
@@ -36,9 +36,9 @@ def get_league_context(
     settings: SettingsDep,
     season: int | None = Query(default=None),
 ) -> LeagueContextOut:
-    state = resolve_state(http, None)
+    state = live_cache.get_state(http)
     resolved_season = season if season is not None else state.season
-    ctx = fetch_league_context(
+    ctx = live_cache.get_league_context(
         http, username=user, league_id=league_id, season=resolved_season
     )
 

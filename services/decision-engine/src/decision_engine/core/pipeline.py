@@ -84,6 +84,7 @@ def run(
     request: DecideRequest,
     snapshot: SnapshotData | None = None,
     league_context: LeagueContext | None = None,
+    score_cache: dict[str, ScoredCandidate] | None = None,
 ) -> DecideResult:
     """Execute the decide pipeline. Returns ranked candidates.
 
@@ -92,6 +93,15 @@ def run(
     every slot in one request) skip the duplicated I/O. Pass the *raw*
     untrimmed snapshot — replay trimming still happens here so the trim
     contract stays in one place.
+
+    ``score_cache`` shares scored candidates across ``run`` calls: a
+    player's score depends on the week, model, risk, and team
+    preferences — never on the slot — so a caller looping over slots
+    (again the ``/decisions`` router; a WR pool is mostly the FLEX pool)
+    can pass one dict and score each player once instead of once per
+    eligible slot. Only valid across calls with identical request knobs
+    (everything but ``slot``/``exclude_player_ids``); pass a fresh dict
+    per user-facing request.
     """
 
     state = resolve_state(http, request.state_override)
@@ -165,6 +175,11 @@ def run(
 
     scored: list[ScoredCandidate] = []
     for player in eligible:
+        if score_cache is not None:
+            cached = score_cache.get(player.player_id)
+            if cached is not None:
+                scored.append(cached)
+                continue
         history = _build_history(player.player_id, snapshot, prior_snapshot)
         score = score_fn(
             player,
@@ -178,15 +193,16 @@ def run(
             request.prefer_team,
             request.avoid_team,
         )
-        scored.append(
-            ScoredCandidate(
-                player=player,
-                score=score,
-                final_score=final,
-                preference_note=pref_note,
-                on_user_roster=player.player_id in user_roster_ids,
-            )
+        candidate = ScoredCandidate(
+            player=player,
+            score=score,
+            final_score=final,
+            preference_note=pref_note,
+            on_user_roster=player.player_id in user_roster_ids,
         )
+        scored.append(candidate)
+        if score_cache is not None:
+            score_cache[player.player_id] = candidate
 
     scored.sort(key=lambda c: c.final_score, reverse=True)
     top = tuple(scored[: request.limit])

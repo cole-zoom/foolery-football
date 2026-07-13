@@ -18,6 +18,7 @@ import pytest
 from decision_engine.types import Player, SnapshotData
 from fastapi.testclient import TestClient
 
+from api import live_cache
 from api.config import Settings
 from api.deps import (
     PrepareSeason,
@@ -27,6 +28,16 @@ from api.deps import (
     get_snapshot_reader,
 )
 from api.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def _clear_live_cache() -> Iterator[None]:
+    """The Sleeper TTL caches are process-global; each test fakes its own
+    Sleeper, so leaked entries would serve one test's league to the next."""
+
+    live_cache.clear()
+    yield
+    live_cache.clear()
 
 
 class FakeHttp:

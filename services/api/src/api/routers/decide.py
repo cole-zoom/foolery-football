@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from typing import cast
 
-from decision_engine.core.league_fetch import resolve_state
 from fastapi import APIRouter, Query
 from ffdm_app import session as app_session
 from ffdm_app.types import AppRequest, LiveState
 
+from api import live_cache
 from api.deps import (
     HttpClientDep,
     PrepareSeasonDep,
@@ -44,7 +44,7 @@ def decide(
     prefer_team: str | None = Query(default=None),
     avoid_team: str | None = Query(default=None),
 ) -> DecideOut:
-    state = resolve_state(http, override=None)
+    state = live_cache.get_state(http)
     live_state = LiveState(season=state.season, week=state.week)
 
     resolved_season = season if season is not None else app_session.default_season(live_state)

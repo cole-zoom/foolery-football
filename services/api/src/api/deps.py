@@ -7,6 +7,8 @@ prod) based on ``Settings.snapshot_backend``.
 
 from __future__ import annotations
 
+import threading
+import time
 from collections.abc import Callable, Iterator
 from functools import lru_cache
 from typing import Annotated
@@ -69,13 +71,41 @@ def _build_snapshot_reader() -> CachingSnapshotReader:
             supported_schema_version=SUPPORTED_SCHEMA_VERSION,
         )
         inner: SnapshotReader = gcs
-        return CachingSnapshotReader(inner, version_for=gcs.version_for)
+        # The generation check is a GCS round trip on *every* request,
+        # cache hit or not. Memoise it briefly: freshly-uploaded
+        # snapshots take up to 30s to appear, which is fine for data
+        # that changes weekly.
+        return CachingSnapshotReader(
+            inner, version_for=_with_ttl(gcs.version_for, ttl_seconds=30.0)
+        )
 
     fs = FilesystemSnapshotReader(
         settings.snapshot_root,
         supported_schema_version=SUPPORTED_SCHEMA_VERSION,
     )
     return CachingSnapshotReader(fs, version_for=fs.version_for)
+
+
+def _with_ttl(
+    version_for: Callable[[int], str | None], *, ttl_seconds: float
+) -> Callable[[int], str | None]:
+    """Memoise a ``version_for`` per season for ``ttl_seconds``."""
+
+    lock = threading.Lock()
+    cache: dict[int, tuple[float, str | None]] = {}
+
+    def wrapped(season: int) -> str | None:
+        now = time.monotonic()
+        with lock:
+            hit = cache.get(season)
+            if hit is not None and now - hit[0] < ttl_seconds:
+                return hit[1]
+        token = version_for(season)
+        with lock:
+            cache[season] = (time.monotonic(), token)
+        return token
+
+    return wrapped
 
 
 def get_snapshot_reader(settings: SettingsDep) -> CachingSnapshotReader:

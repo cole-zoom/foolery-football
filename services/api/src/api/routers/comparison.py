@@ -25,16 +25,21 @@ from decision_engine.core.eligibility import (
 )
 from decision_engine.core.league_fetch import (
     UserInputError,
-    fetch_league_context,
     fetch_matchups,
-    resolve_state,
 )
 from decision_engine.core.pipeline import DecideRequest
 from decision_engine.core.scoring.common import weekly_points
-from decision_engine.types import NflState, Pool, ScoringSettings, SnapshotData
+from decision_engine.types import (
+    NflState,
+    Pool,
+    ScoredCandidate,
+    ScoringSettings,
+    SnapshotData,
+)
 from fastapi import APIRouter, Query
 from ffdm_app.types import LiveState
 
+from api import live_cache
 from api.deps import (
     HttpClientDep,
     PrepareSeasonDep,
@@ -75,7 +80,7 @@ def get_comparison(
     season: int | None = Query(default=None),
     week: int | None = Query(default=None),
 ) -> ComparisonOut:
-    state = resolve_state(http, override=None)
+    state = live_cache.get_state(http)
     live_state = LiveState(season=state.season, week=state.week)
 
     resolved_season = season if season is not None else _default_season(live_state)
@@ -93,7 +98,7 @@ def get_comparison(
             "the comparison needs a completed week"
         )
 
-    league_context = fetch_league_context(
+    league_context = live_cache.get_league_context(
         http, username=user, league_id=league_id, season=resolved_season
     )
     scoring = league_context.league.scoring_settings
@@ -145,6 +150,8 @@ def get_comparison(
     starters = list(week_roster.starters)
     seen: Counter[str] = Counter()
     assigned_player_ids: set[str] = set()
+    # Scores are slot-independent; share them across the slot loop.
+    score_cache: dict[str, ScoredCandidate] = {}
     slot_picks: list[tuple[str, str, str | None, str | None]] = []
     selectable_slots: list[str] = []
     using_prior_season = False
@@ -176,6 +183,7 @@ def get_comparison(
             request=request,
             snapshot=snapshot,
             league_context=league_context,
+            score_cache=score_cache,
         )
         if result.using_prior_season:
             using_prior_season = True

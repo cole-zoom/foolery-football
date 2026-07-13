@@ -204,13 +204,18 @@ function SessionView({
     placeholderData: (prev) => prev,
   })
 
-  // Once the current week resolves, fan out prefetches for every playable
-  // week in parallel so flipping the WeekPicker is instant. "Playable"
-  // means strictly: weeks that could have actually occurred. For past
-  // seasons that's 1..18; for the live season it's 1..live.week
-  // (anything beyond hasn't happened, so scoring just falls back to
-  // boilerplate). Each prefetch retries twice with backoff for transient
-  // Sleeper hiccups.
+  // Once the current week resolves, prefetch the other playable weeks so
+  // flipping the WeekPicker is instant. "Playable" means strictly: weeks
+  // that could have actually occurred. For past seasons that's 1..18; for
+  // the live season it's 1..live.week (anything beyond hasn't happened,
+  // so scoring just falls back to boilerplate).
+  //
+  // Deliberately NOT a parallel fan-out: 17 concurrent /decisions calls
+  // saturate the API's single-vCPU instance, and a week the user then
+  // *clicks* queues behind all of them. A small worker pool (nearest
+  // weeks first — the ones the picker reaches soonest) keeps the server
+  // free to answer interactive requests immediately. Each prefetch
+  // retries twice with backoff for transient Sleeper hiccups.
   useEffect(() => {
     if (!decisionsQ.data || !stateQ.data || riskPending || week === null) return
 
@@ -220,39 +225,58 @@ function SessionView({
         ? REGULAR_SEASON_LAST_WEEK
         : Math.min(REGULAR_SEASON_LAST_WEEK, Math.max(1, live.week))
 
+    const queue: number[] = []
     for (let w = 1; w <= maxWeek; w++) {
-      if (w === week) continue
-      void queryClient.prefetchQuery({
-        queryKey: [
-          'decisions',
-          session.leagueId,
-          session.username,
-          session.season,
-          w,
-          debouncedRisk,
-          pool,
-          model,
-          prefer,
-          avoid,
-        ],
-        queryFn: () =>
-          api.decisions({
-            league_id: session.leagueId,
-            user: session.username,
-            risk: debouncedRisk,
+      if (w !== week) queue.push(w)
+    }
+    queue.sort((a, b) => Math.abs(a - week) - Math.abs(b - week))
+
+    // Cancellation is soft: in-flight prefetches finish (their result is
+    // still cacheable), but no new ones launch after a knob change
+    // re-runs this effect.
+    let cancelled = false
+    const PREFETCH_CONCURRENCY = 2
+    const worker = async () => {
+      while (!cancelled) {
+        const w = queue.shift()
+        if (w === undefined) return
+        await queryClient.prefetchQuery({
+          queryKey: [
+            'decisions',
+            session.leagueId,
+            session.username,
+            session.season,
+            w,
+            debouncedRisk,
             pool,
             model,
-            season: session.season,
-            week: w,
-            prefer_team: prefer ?? undefined,
-            avoid_team: avoid ?? undefined,
-          }),
-        // Treat cached results as fresh for 5 min so re-renders of this
-        // effect don't refire identical requests.
-        staleTime: 5 * 60 * 1000,
-        retry: 2,
-        retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
-      })
+            prefer,
+            avoid,
+          ],
+          queryFn: () =>
+            api.decisions({
+              league_id: session.leagueId,
+              user: session.username,
+              risk: debouncedRisk,
+              pool,
+              model,
+              season: session.season,
+              week: w,
+              prefer_team: prefer ?? undefined,
+              avoid_team: avoid ?? undefined,
+            }),
+          // Treat cached results as fresh for 5 min so re-renders of this
+          // effect don't refire identical requests.
+          staleTime: 5 * 60 * 1000,
+          retry: 2,
+          retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
+        })
+      }
+    }
+    for (let i = 0; i < PREFETCH_CONCURRENCY; i++) void worker()
+
+    return () => {
+      cancelled = true
     }
   }, [
     decisionsQ.data,

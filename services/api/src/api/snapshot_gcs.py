@@ -12,23 +12,38 @@ Seed the bucket with
 
 Sits in the api package — not decision-engine — so the engine stays free
 of cloud SDK deps.
+
+A cold season load is latency-bound, not bandwidth-bound: ~20 small
+objects behind per-request round trips. So ``load`` fetches the manifest
+first (it names every other artifact), then downloads the rest in one
+concurrent burst — no per-file ``exists()`` HEADs; a 404 on an optional
+artifact just means "absent".
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
 
 from decision_engine.clients.snapshot_reader import (
     MANIFEST_NAME,
+    PLAYERS_NAME,
+    PRIOR_SEASON_NAME,
+    SCHEDULE_NAME,
     SnapshotMissingError,
     SnapshotSchemaError,
     assemble_snapshot,
 )
 from decision_engine.types import SnapshotData
-from google.cloud import storage  # type: ignore[attr-defined]
+from google.api_core.exceptions import NotFound
+from google.cloud import storage  # type: ignore[import-untyped]
 
 log = logging.getLogger(__name__)
+
+# Concurrent blob downloads per season load. A season is ~20 objects;
+# beyond that the burst is limited by the client's connection pool.
+_MAX_DOWNLOAD_WORKERS = 16
 
 
 class GcsSnapshotReader:
@@ -50,26 +65,53 @@ class GcsSnapshotReader:
 
     def load(self, season: int) -> SnapshotData:
         season_prefix = f"{self._prefix}/{season}"
-        manifest_blob = self._bucket.blob(f"{season_prefix}/{MANIFEST_NAME}")
-        if not manifest_blob.exists(self._client):
+        location_label = f"gs://{self._bucket_name}/{season_prefix}"
+
+        def download(name: str) -> bytes:
+            payload: bytes = self._bucket.blob(
+                f"{season_prefix}/{name}"
+            ).download_as_bytes()
+            return payload
+
+        try:
+            manifest_bytes = download(MANIFEST_NAME)
+        except NotFound:
             raise SnapshotMissingError(
                 f"no snapshot for season {season} at "
                 f"gs://{self._bucket_name}/{season_prefix}/; "
                 "seed the bucket with `gsutil rsync` or run stats-loader."
-            )
+            ) from None
 
-        location_label = f"gs://{self._bucket_name}/{season_prefix}"
         log.info("Reading snapshot %s", location_label)
 
-        def load_json(name: str) -> object:
-            blob = self._bucket.blob(f"{season_prefix}/{name}")
+        # blobs[name]: bytes = downloaded, None = confirmed absent (404).
+        blobs: dict[str, bytes | None] = {MANIFEST_NAME: manifest_bytes}
+
+        def fetch(name: str) -> None:
             try:
-                payload = blob.download_as_bytes()
-            except Exception as exc:
-                # google.api_core.exceptions.NotFound or transport errors.
+                blobs[name] = download(name)
+            except NotFound:
+                blobs[name] = None
+
+        names = [PLAYERS_NAME, PRIOR_SEASON_NAME, SCHEDULE_NAME]
+        names += [f"stats_week_{w}.json" for w in _peek_weeks(manifest_bytes)]
+
+        try:
+            with ThreadPoolExecutor(max_workers=_MAX_DOWNLOAD_WORKERS) as pool:
+                # list() propagates the first worker exception (transport
+                # errors etc. — NotFound is handled inside fetch).
+                list(pool.map(fetch, names))
+        except Exception as exc:
+            raise SnapshotSchemaError(
+                f"{location_label}: failed to read snapshot artifacts: {exc}"
+            ) from exc
+
+        def load_json(name: str) -> object:
+            payload = blobs.get(name)
+            if payload is None:
                 raise SnapshotSchemaError(
-                    f"{location_label}: failed to read {name}: {exc}"
-                ) from exc
+                    f"{location_label}: failed to read {name}: object not found"
+                )
             try:
                 # Top-level type is checked per artifact in assemble_snapshot
                 # (most artifacts are objects; schedule.json is an array).
@@ -80,7 +122,7 @@ class GcsSnapshotReader:
                 ) from exc
 
         def has_object(name: str) -> bool:
-            return self._bucket.blob(f"{season_prefix}/{name}").exists(self._client)
+            return blobs.get(name) is not None
 
         return assemble_snapshot(
             season,
@@ -102,8 +144,6 @@ class GcsSnapshotReader:
         enough given the snapshot itself is served from in-memory cache.
         """
 
-        from google.api_core.exceptions import NotFound  # type: ignore[import-untyped]
-
         blob = self._bucket.blob(f"{self._prefix}/{season}/{MANIFEST_NAME}")
         try:
             blob.reload(client=self._client)
@@ -113,3 +153,20 @@ class GcsSnapshotReader:
         if generation is None:
             return None
         return str(generation)
+
+
+def _peek_weeks(manifest_bytes: bytes) -> list[int]:
+    """Week numbers from a raw manifest, tolerantly.
+
+    Only used to know which ``stats_week_<W>.json`` blobs to prefetch —
+    ``assemble_snapshot`` remains the real validator, so anything
+    unparseable here just means "prefetch nothing extra" and the schema
+    error surfaces there with its proper message.
+    """
+
+    try:
+        manifest = json.loads(manifest_bytes)
+        weeks = manifest.get("weeks_included") or []
+        return [int(w) for w in weeks] if isinstance(weeks, list) else []
+    except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
+        return []

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from decision_engine.core.league_fetch import resolve_state
 from fastapi import APIRouter
 
+from api import live_cache
 from api.deps import HttpClientDep
 from api.schemas import StateOut
 
@@ -13,5 +13,5 @@ router = APIRouter(tags=["state"])
 
 @router.get("/state", response_model=StateOut)
 def get_state(http: HttpClientDep) -> StateOut:
-    state = resolve_state(http, override=None)
+    state = live_cache.get_state(http)
     return StateOut(season=state.season, week=state.week)

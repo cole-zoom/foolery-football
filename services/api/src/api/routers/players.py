@@ -11,12 +11,12 @@ from __future__ import annotations
 import math
 
 from decision_engine.clients.snapshot_reader import SnapshotMissingError
-from decision_engine.core.league_fetch import resolve_state
 from decision_engine.providers import sleeper
 from decision_engine.types import SnapshotData
 from fastapi import APIRouter, HTTPException, Query
 from ffdm_app.types import LiveState
 
+from api import live_cache
 from api.deps import (
     HttpClientDep,
     PrepareSeasonDep,
@@ -48,7 +48,7 @@ def get_player_stats(
         ),
     ),
 ) -> PlayerStatsOut:
-    state = resolve_state(http, None)
+    state = live_cache.get_state(http)
     resolved_season = season if season is not None else state.season
     prepare_season(
         resolved_season,
