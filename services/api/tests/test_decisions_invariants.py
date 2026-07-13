@@ -204,3 +204,36 @@ def test_prefer_team_is_case_normalised(make_client) -> None:
     plain_total = plain["projection_total"]
     boosted_total = boosted["projection_total"]
     assert boosted_total >= plain_total
+
+
+def test_model_param_reaches_pipeline(make_client) -> None:
+    """``?model=context`` must select the context scoring model.
+
+    The fixture snapshot is tiny, so context falls back to naive means —
+    but its notes carry the "context:" tag, proving the param routed.
+    """
+
+    http, snaps = _basic_setup()
+    client = make_client(http=http, snapshots=snaps)
+    body = client.get(
+        "/leagues/L1/decisions",
+        params={"user": "cole", "season": 2026, "week": 3, "pool": "roster",
+                "model": "context"},
+    ).json()
+    recs = [d["recommended"] for d in body["decisions"] if d["recommended"]]
+    assert recs
+    assert all(
+        any(note.startswith("context:") for note in r["score"]["notes"]) for r in recs
+    )
+
+
+def test_unknown_model_is_a_400(make_client) -> None:
+    http, snaps = _basic_setup()
+    client = make_client(http=http, snapshots=snaps)
+    resp = client.get(
+        "/leagues/L1/decisions",
+        params={"user": "cole", "season": 2026, "week": 3, "pool": "roster",
+                "model": "clairvoyant"},
+    )
+    assert resp.status_code == 400
+    assert "unknown scoring model" in resp.json()["error"]

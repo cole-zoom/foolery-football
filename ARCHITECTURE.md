@@ -43,6 +43,7 @@ backward-compatible.
 | `data/snapshots/<YYYY-MM-DD>[-N]/stats_week_<W>.json` | stats-loader | Per-week NFL stats. One file per completed week of the current season. |
 | `data/snapshots/<YYYY-MM-DD>[-N]/projections_week_<W>.json` | stats-loader | Sleeper's own projection for that week. Stored as a baseline. |
 | `data/snapshots/<YYYY-MM-DD>[-N]/stats_prior_season.json` | stats-loader | Prior season totals, present only when bootstrapping (early in a new season). |
+| `data/snapshots/<YYYY-MM-DD>[-N]/schedule.json` | stats-loader | The season's NFL schedule (Sleeper `/schedule/nfl/regular/<season>`), verbatim. Optional — snapshots predating it still load. Feeds the context model's opponent lookups. |
 | `data/snapshots/<YYYY-MM-DD>[-N]/` (the folder) | stats-loader | **Immutable** once renamed into place. Folder name = wallclock date the script finished. Re-runs on the same day append `-2`, `-3`, etc. |
 
 `decision-engine` reads the lexicographically-latest folder in
