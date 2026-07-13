@@ -136,6 +136,13 @@ recommended lineup — none is cosmetic:
   believes in or not.
 - **Per-slot pins** — override any recommendation; totals recompute
   around the override.
+- **Model vs. you (hindsight) view** — for any completed week, the
+  lineup the model would have fielded (replayed leakage-safe) beside
+  the lineup you actually started, both scored by real results. Comes
+  with the model's report card: per-player predicted-vs-actual errors,
+  MAE, signed bias, and the perfect-hindsight lineup ("points left on
+  the bench"). The week-W roster comes from Sleeper's matchup archive,
+  so mid-season trades don't leak into the replay.
 
 Decision-tied readouts: each slot shows **MATCH** (your starter is
 already optimal) or **SWAP +N** (projected points gained by benching

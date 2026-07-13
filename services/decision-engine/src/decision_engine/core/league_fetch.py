@@ -13,7 +13,13 @@ import logging
 
 from decision_engine.clients.http import HttpClient, NotFoundError
 from decision_engine.providers import sleeper
-from decision_engine.types import LeagueContext, LeagueSummary, NflState, Roster
+from decision_engine.types import (
+    LeagueContext,
+    LeagueSummary,
+    Matchup,
+    NflState,
+    Roster,
+)
 
 log = logging.getLogger(__name__)
 
@@ -81,6 +87,18 @@ def fetch_league_context(
         rosters=tuple(rosters),
         user_roster=user_roster,
     )
+
+
+def fetch_matchups(http: HttpClient, *, league_id: str, week: int) -> list[Matchup]:
+    """``/v1/league/<id>/matchups/<week>`` — every roster's actual lineup.
+
+    This is the historical record: ``players``/``starters`` on each entry
+    are the roster as it stood in that week, which ``/rosters`` cannot
+    provide. Weeks that never happened return an empty list.
+    """
+
+    payload = http.get_json(f"/v1/league/{league_id}/matchups/{week}")
+    return sleeper.validate_matchups(payload)
 
 
 def _find_user_roster(rosters: list[Roster], user_id: str) -> Roster | None:

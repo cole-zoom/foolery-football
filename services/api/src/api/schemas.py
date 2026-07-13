@@ -127,6 +127,71 @@ class DecisionsOut(BaseModel):
     prior_season: int | None = None
 
 
+class ComparisonPlayerOut(BaseModel):
+    """One player's predicted-vs-actual line for a completed week.
+
+    ``predicted_mean`` is None when the model never scored the player
+    (no starter slot accepts their position). ``actual_points`` is None
+    when they produced no stat row that week — i.e. they didn't play.
+    """
+
+    player: PlayerOut
+    predicted_mean: float | None
+    actual_points: float | None
+
+
+class ComparisonSlotOut(BaseModel):
+    """Model's replayed pick vs the starter the human actually fielded."""
+
+    slot_id: str
+    slot: str
+    model_pick: ComparisonPlayerOut | None
+    actual_starter: ComparisonPlayerOut | None
+    same_player: bool
+
+
+class ComparisonTotalsOut(BaseModel):
+    """Lineup totals, all measured with the league's own scoring math.
+
+    ``human_predicted`` is None when none of the actual starters were
+    scoreable. ``perfect_actual`` is the best-possible total from that
+    week's roster with hindsight (None if it couldn't be computed).
+    """
+
+    model_predicted: float
+    model_actual: float
+    human_predicted: float | None
+    human_actual: float
+    perfect_actual: float | None
+
+
+class ComparisonAccuracyOut(BaseModel):
+    """Prediction-quality stats over roster players who played.
+
+    ``mean_error`` is signed (predicted - actual): positive means the
+    model over-predicted on average.
+    """
+
+    n: int
+    mae: float | None
+    mean_error: float | None
+
+
+class ComparisonOut(BaseModel):
+    """Model-vs-human retrospective for one completed week."""
+
+    season: int
+    week: int
+    model: str
+    risk: float
+    slots: list[ComparisonSlotOut]
+    totals: ComparisonTotalsOut
+    accuracy: ComparisonAccuracyOut
+    roster: list[ComparisonPlayerOut]
+    using_prior_season: bool = False
+    prior_season: int | None = None
+
+
 class WeeklyStatLineOut(BaseModel):
     week: int
     points: float

@@ -133,6 +133,49 @@ export const DecisionsSchema = z.object({
 })
 export type Decisions = z.infer<typeof DecisionsSchema>
 
+export const ComparisonPlayerSchema = z.object({
+  player: PlayerSchema,
+  // null = the model never scored them (no slot accepts the position)
+  predicted_mean: z.number().nullable(),
+  // null = no stat row that week, i.e. they didn't play
+  actual_points: z.number().nullable(),
+})
+export type ComparisonPlayer = z.infer<typeof ComparisonPlayerSchema>
+
+export const ComparisonSlotSchema = z.object({
+  slot_id: z.string(),
+  slot: z.string(),
+  model_pick: ComparisonPlayerSchema.nullable(),
+  actual_starter: ComparisonPlayerSchema.nullable(),
+  same_player: z.boolean(),
+})
+export type ComparisonSlot = z.infer<typeof ComparisonSlotSchema>
+
+export const ComparisonSchema = z.object({
+  season: z.number(),
+  week: z.number(),
+  model: z.string(),
+  risk: z.number(),
+  slots: z.array(ComparisonSlotSchema),
+  totals: z.object({
+    model_predicted: z.number(),
+    model_actual: z.number(),
+    human_predicted: z.number().nullable(),
+    human_actual: z.number(),
+    perfect_actual: z.number().nullable(),
+  }),
+  accuracy: z.object({
+    n: z.number(),
+    mae: z.number().nullable(),
+    // signed, predicted - actual: positive = the model over-projected
+    mean_error: z.number().nullable(),
+  }),
+  roster: z.array(ComparisonPlayerSchema),
+  using_prior_season: z.boolean(),
+  prior_season: z.number().nullable(),
+})
+export type Comparison = z.infer<typeof ComparisonSchema>
+
 export const WeeklyStatLineSchema = z.object({
   week: z.number(),
   points: z.number(),
@@ -231,6 +274,17 @@ export const api = {
   }) => {
     const { league_id, ...rest } = args
     return request(DecisionsSchema, `/leagues/${league_id}/decisions`, rest)
+  },
+  comparison: (args: {
+    league_id: string
+    user: string
+    risk?: number
+    model?: Model
+    season?: number
+    week?: number
+  }) => {
+    const { league_id, ...rest } = args
+    return request(ComparisonSchema, `/leagues/${league_id}/comparison`, rest)
   },
   playerStats: (playerId: string, leagueId: string, season?: number, week?: number) =>
     request(PlayerStatsSchema, `/players/${playerId}/stats`, {
