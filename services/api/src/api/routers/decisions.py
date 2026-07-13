@@ -13,12 +13,12 @@ from typing import cast
 
 from decision_engine.core import pipeline as decide_pipeline
 from decision_engine.core.eligibility import NON_SELECTABLE_SLOTS
-from decision_engine.core.league_fetch import fetch_league_context, resolve_state
 from decision_engine.core.pipeline import DecideRequest
-from decision_engine.types import NflState, Player, SnapshotData
+from decision_engine.types import NflState, Player, ScoredCandidate, SnapshotData
 from fastapi import APIRouter, Query
 from ffdm_app.types import LiveState
 
+from api import live_cache
 from api.deps import (
     HttpClientDep,
     PrepareSeasonDep,
@@ -60,7 +60,7 @@ def get_decisions(
     prefer_team: str | None = Query(default=None),
     avoid_team: str | None = Query(default=None),
 ) -> DecisionsOut:
-    state = resolve_state(http, override=None)
+    state = live_cache.get_state(http)
     live_state = LiveState(season=state.season, week=state.week)
 
     resolved_season = season if season is not None else _default_season(live_state)
@@ -76,7 +76,7 @@ def get_decisions(
     # Sleeper. With the dep returning a process-wide caching reader,
     # repeated /decisions calls share the parse too.
     snapshot = snapshot_reader.load(resolved_season)
-    league_context = fetch_league_context(
+    league_context = live_cache.get_league_context(
         http, username=user, league_id=league_id, season=resolved_season
     )
 
@@ -96,6 +96,10 @@ def get_decisions(
     # for another (e.g. the best WR cannot fill WR1 AND FLEX). Track
     # picks across slots and exclude them from subsequent decisions.
     assigned_player_ids: set[str] = set()
+    # A player's score is slot-independent, so share it across the slot
+    # loop — with pool=waivers/both the WR/RB/TE/FLEX pools overlap by
+    # thousands of players.
+    score_cache: dict[str, ScoredCandidate] = {}
 
     for i, slot in enumerate(league_context.league.roster_positions):
         seen[slot] += 1
@@ -126,6 +130,7 @@ def get_decisions(
             request=request,
             snapshot=snapshot,
             league_context=league_context,
+            score_cache=score_cache,
         )
 
         if result.using_prior_season:

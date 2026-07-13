@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from decision_engine.clients.http import NotFoundError
-from decision_engine.core.league_fetch import UserInputError, resolve_state
+from decision_engine.core.league_fetch import UserInputError
 from decision_engine.providers import sleeper
 from fastapi import APIRouter, Query
 
+from api import live_cache
 from api.deps import HttpClientDep
 from api.schemas import LeagueSummaryOut, UserLeaguesOut
 
@@ -33,7 +34,9 @@ def list_user_leagues(
         raise UserInputError(f"unknown Sleeper username {username!r}")
     user = sleeper.validate_user(user_payload)
 
-    resolved_season = season if season is not None else resolve_state(http, None).season
+    resolved_season = (
+        season if season is not None else live_cache.get_state(http).season
+    )
 
     leagues_payload = http.get_json(
         f"/v1/user/{user.user_id}/leagues/nfl/{resolved_season}"
