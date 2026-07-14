@@ -16,7 +16,9 @@ DEFAULT_SLEEPER_BASE_URL = "https://api.sleeper.app"
 DEFAULT_RISK = 0.5
 DEFAULT_LIMIT = 10
 DEFAULT_POOL: Pool = "roster"
-DEFAULT_MODEL = "naive"
+# blend cleared the PRD 3.4 ship gate on the frozen 100-league sample
+# (July 2026): 79/99 leagues beaten, +75.9 avg margin vs human.
+DEFAULT_MODEL = "blend"
 
 # We only understand snapshot schemas up to this version. If the loader
 # bumps the snapshot format, this bumps with it.

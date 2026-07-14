@@ -54,7 +54,7 @@ def get_comparison(
     settings: SettingsDep,
     risk: float = Query(default=0.5, ge=0.0, le=1.0),
     pool: Pool = Query(default="roster"),
-    model: str = Query(default="naive"),
+    model: str = Query(default="blend"),
     season: int | None = Query(default=None),
     week: int | None = Query(default=None),
 ) -> ComparisonOut:

@@ -34,7 +34,7 @@ export default function App() {
   const [openPlayerId, setOpenPlayerId] = useState<string | null>(null)
   const [risk, setRisk] = useState(0.5)
   const [pool, setPool] = useState<Pool>('roster')
-  const [model, setModel] = useState<Model>('context')
+  const [model, setModel] = useState<Model>('blend')
   const [week, setWeek] = useState<number | null>(null)
   const [prefer, setPrefer] = useState<string | null>(null)
   const [avoid, setAvoid] = useState<string | null>(null)
