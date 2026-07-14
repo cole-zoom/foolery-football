@@ -30,3 +30,4 @@
   - [3.2 — Blend model](product-specs/milestone-3/3.2-blend-model.md)
   - [3.3 — Lineup assembly](product-specs/milestone-3/3.3-lineup-assembly.md)
   - [3.4 — Eval attribution + ship gate](product-specs/milestone-3/3.4-eval-attribution-and-ship-gate.md)
+- [Milestone 4 — Scratch model: a sleeperless blend](product-specs/milestone-4-scratch-model.md)
