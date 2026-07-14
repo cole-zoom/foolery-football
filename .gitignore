@@ -21,6 +21,13 @@ web/dist/
 data/seasons/
 data/snapshots/
 
+# Eval harness working data — regenerable from Sleeper + the snapshots
+# (discover_leagues.py --rng-seed makes the sample reproducible)
+evals/cache/
+evals/results/
+evals/reports/
+evals/leagues_*.json
+
 # Local env files
 .env
 .env.local

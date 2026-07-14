@@ -19,6 +19,7 @@ from decision_engine.types import (
     Matchup,
     NflState,
     Roster,
+    SleeperUser,
 )
 
 log = logging.getLogger(__name__)
@@ -81,6 +82,47 @@ def fetch_league_context(
             "Sleeper returned the league but no matching roster — this is a bug."
         )
 
+    return LeagueContext(
+        user=user,
+        league=league,
+        rosters=tuple(rosters),
+        user_roster=user_roster,
+    )
+
+
+def fetch_league_context_by_roster(
+    http: HttpClient,
+    *,
+    league_id: str,
+    roster_id: int,
+) -> LeagueContext:
+    """Build a ``LeagueContext`` from a league_id + roster_id directly.
+
+    The username flow (``fetch_league_context``) exists to resolve and
+    validate *whose* roster to use. Offline callers (the eval harness)
+    already know the roster; skipping the ``/v1/user`` round-trips also
+    means no Sleeper username is required. The ``user`` field is
+    synthesised from the roster's ``owner_id``.
+    """
+
+    try:
+        league_payload = http.get_json(f"/v1/league/{league_id}")
+    except NotFoundError as exc:
+        raise UserInputError(f"unknown league {league_id!r}") from exc
+    league = sleeper.validate_league(league_payload)
+
+    rosters_payload = http.get_json(f"/v1/league/{league_id}/rosters")
+    rosters = sleeper.validate_rosters(rosters_payload)
+    user_roster = next((r for r in rosters if r.roster_id == roster_id), None)
+    if user_roster is None:
+        raise UserInputError(
+            f"roster_id={roster_id} not found in league {league_id} "
+            f"({len(rosters)} rosters)"
+        )
+
+    user = SleeperUser(
+        user_id=user_roster.owner_id or f"roster-{roster_id}",
+    )
     return LeagueContext(
         user=user,
         league=league,
