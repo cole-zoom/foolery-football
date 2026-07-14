@@ -58,3 +58,37 @@ controls the "engaged humans" filtered view.
 
 Results land in `evals/results/<season>/` (gitignored), reports in
 `evals/reports/`. A follow-up could surface the report in `web/`.
+
+## Frozen sample
+
+`evals/testdata/leagues_2025.json` is the committed copy of the
+100-league sample (`--rng-seed 42`). It is the ship-gate population —
+never regenerate it; a drifted sample silently changes the bar. The
+gitignored `evals/leagues_2025.json` working copy should be identical
+(restore it from testdata if lost).
+
+## Attribution
+
+`run_eval.py` persists per-slot `picks` in each model cell (who the
+model started vs the human, actuals, and the best eligible bench
+alternative). `aggregate.py` turns those into per-model attribution:
+ghost starts (started a player who didn't play), benched-the-human's-
+best, and a per-losing-week decomposition into ghost points vs
+ranking-error points. Old result files without `picks` still
+aggregate; the attribution table just covers fewer weeks.
+
+Offline tests: `uv run --project services/decision-engine python -m
+pytest evals/test_aggregate.py`.
+
+## Ship gate (PRD 3.4)
+
+A model becomes the web/CLI default only when, on the frozen sample:
+
+1. weekly win rate vs human ≥ 40% **and** mean season margin ≥ −75;
+2. over-prediction bias ≤ +5 pts/wk (the `bias/wk` column);
+3. backtest (`scripts/backtest-models.py`, 2025, weeks 4–18)
+   startable-MAE not worse than context's;
+4. seed (footballguys) league: not the worst model there.
+
+Every model/assembly PR pastes the before/after of `aggregate.py`
+(all-leagues table + attribution table) in the PR body.

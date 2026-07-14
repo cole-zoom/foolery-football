@@ -21,7 +21,7 @@ import threading
 from collections import OrderedDict
 from typing import Final
 
-from decision_engine.core.scoring import context, gbt, naive
+from decision_engine.core.scoring import blend, context, gbt, naive
 from decision_engine.core.scoring.protocol import ScoreFn, ScoreModelFactory
 from decision_engine.types import SnapshotData
 
@@ -29,6 +29,7 @@ MODELS: Final[dict[str, ScoreModelFactory]] = {
     "naive": naive.build,
     "context": context.build,
     "gbt": gbt.build,
+    "blend": blend.build,
 }
 
 # (model, snapshot_dir, season, snapshot_version, weeks_included).

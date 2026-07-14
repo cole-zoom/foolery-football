@@ -67,6 +67,7 @@ def league_summary(record: dict[str, Any], models: list[str]) -> dict[str, Any] 
     }
     for model in models:
         total = sum(rec["models"][model]["actual"] for _, rec in weeks)
+        predicted = sum(rec["models"][model]["predicted"] for _, rec in weeks)
         weekly_wins = sum(
             1
             for _, rec in weeks
@@ -78,8 +79,120 @@ def league_summary(record: dict[str, Any], models: list[str]) -> dict[str, Any] 
             "beats_human": total > human,
             "weekly_win_rate": round(weekly_wins / len(weeks), 3),
             "efficiency": round(total / perfect, 4) if perfect else None,
+            # Over-prediction bias: how far the model's own lineup
+            # prediction overshot reality, per week (ship-gate metric 2).
+            "bias_per_week": round((predicted - total) / len(weeks), 2),
         }
     return out
+
+
+def attribution(records: list[dict[str, Any]], models: list[str]) -> dict[str, Any]:
+    """Where did the lost points go? Per model, over league-weeks with picks.
+
+    - **ghost starts**: model picked a player who scored nothing while an
+      eligible bench alternative scored (``best_alt_actual`` persisted by
+      run_eval — the aggregate has no roster data of its own).
+    - **benched the human's best**: the human's highest-actual starter is
+      nowhere in the model lineup; loss measured vs the model's pick at
+      the slot the human started them.
+    - **loss decomposition**: for losing weeks, the margin split into
+      ghost-start points vs ranking-error points (non-ghost picks that
+      underperformed the human's choice at the same slot). The two
+      buckets sum to the losing margin exactly.
+
+    Cells without ``picks`` (pre-3.4 result files) are skipped — the
+    aggregate still runs, the attribution just covers fewer weeks.
+    """
+
+    out: dict[str, Any] = {}
+    for model in models:
+        n_weeks = 0
+        ghost_count = 0
+        ghost_pts = 0.0
+        benched_weeks = 0
+        benched_pts = 0.0
+        losing_weeks = 0
+        loss_ghost = 0.0
+        loss_rank = 0.0
+        for record in records:
+            for _week_str, rec in record["weeks"].items():
+                cell = rec.get("models", {}).get(model)
+                if not cell or "error" in cell or "picks" not in cell:
+                    continue
+                picks = cell["picks"]
+                n_weeks += 1
+                model_pids = {p["model"] for p in picks if p["model"]}
+
+                def is_ghost(p: dict[str, Any]) -> bool:
+                    return (
+                        p["model"] is not None
+                        and (p.get("model_actual") or 0.0) <= 0.0
+                        and (p.get("best_alt_actual") or 0.0) > 0.0
+                    )
+
+                for p in picks:
+                    if is_ghost(p):
+                        ghost_count += 1
+                        ghost_pts += p.get("best_alt_actual") or 0.0
+
+                started = [p for p in picks if p["human"]]
+                if started:
+                    best = max(started, key=lambda p: p.get("human_actual") or 0.0)
+                    best_actual = best.get("human_actual") or 0.0
+                    if best["human"] not in model_pids and best_actual > 0:
+                        benched_weeks += 1
+                        benched_pts += best_actual - (best.get("model_actual") or 0.0)
+
+                model_total = sum(p.get("model_actual") or 0.0 for p in picks)
+                human_total = sum(p.get("human_actual") or 0.0 for p in picks)
+                if model_total < human_total:
+                    losing_weeks += 1
+                    for p in picks:
+                        diff = (p.get("human_actual") or 0.0) - (
+                            p.get("model_actual") or 0.0
+                        )
+                        if is_ghost(p):
+                            loss_ghost += diff
+                        else:
+                            loss_rank += diff
+
+        if n_weeks == 0:
+            out[model] = {"n_weeks": 0}
+            continue
+        out[model] = {
+            "n_weeks": n_weeks,
+            "ghost_starts": ghost_count,
+            "ghost_starts_per_week": round(ghost_count / n_weeks, 3),
+            "ghost_points_lost": round(ghost_pts, 1),
+            "ghost_points_per_week": round(ghost_pts / n_weeks, 2),
+            "benched_best_weeks": benched_weeks,
+            "benched_best_rate": round(benched_weeks / n_weeks, 3),
+            "benched_best_points_lost": round(benched_pts, 1),
+            "losing_weeks": losing_weeks,
+            "loss_ghost_points": round(loss_ghost, 1),
+            "loss_ranking_points": round(loss_rank, 1),
+        }
+    return out
+
+
+def print_attribution(attr: dict[str, Any], models: list[str]) -> None:
+    print("\n=== attribution (league-weeks with persisted picks) ===")
+    header = (
+        f"{'model':<10} {'weeks':>6} {'ghosts/wk':>10} {'ghost pts/wk':>13} "
+        f"{'benched-best%':>14} {'loss: ghost':>12} {'loss: ranking':>14}"
+    )
+    print(header)
+    print("-" * len(header))
+    for model in models:
+        a = attr.get(model) or {}
+        if not a.get("n_weeks"):
+            print(f"{model:<10} {'no picks recorded — re-run run_eval.py':>6}")
+            continue
+        print(
+            f"{model:<10} {a['n_weeks']:>6} {a['ghost_starts_per_week']:>10.2f} "
+            f"{a['ghost_points_per_week']:>13.2f} {a['benched_best_rate']:>13.1%} "
+            f"{a['loss_ghost_points']:>12.1f} {a['loss_ranking_points']:>14.1f}"
+        )
 
 
 def percentile_of(value: float, population: list[float]) -> float:
@@ -110,7 +223,10 @@ def report(summaries: list[dict[str, Any]], models: list[str], label: str) -> di
     print(f"\n=== {label} ({n} leagues) ===")
     out: dict[str, Any] = {"label": label, "n_leagues": n, "models": {}}
 
-    header = f"{'model':<10} {'beats human':>12} {'wkly win%':>10} {'avg margin':>11} {'med margin':>11} {'efficiency':>11}"
+    header = (
+        f"{'model':<10} {'beats human':>12} {'wkly win%':>10} {'avg margin':>11} "
+        f"{'med margin':>11} {'efficiency':>11} {'bias/wk':>9}"
+    )
     print(header)
     print("-" * len(header))
     for model in models:
@@ -118,19 +234,22 @@ def report(summaries: list[dict[str, Any]], models: list[str], label: str) -> di
         margins = [s["models"][model]["margin_vs_human"] for s in summaries]
         weekly = [s["models"][model]["weekly_win_rate"] for s in summaries]
         effs = [s["models"][model]["efficiency"] for s in summaries]
+        biases = [s["models"][model]["bias_per_week"] for s in summaries]
         out["models"][model] = {
             "beats_human_leagues": wins,
             "beats_human_rate": round(wins / n, 3),
             "weekly_win_rate_mean": round(statistics.fmean(weekly), 3),
             "margin": dist(margins),
             "efficiency": dist(effs),
+            "bias_per_week_mean": round(statistics.fmean(biases), 2),
         }
         print(
             f"{model:<10} {wins:>7}/{n:<4} "
             f"{statistics.fmean(weekly):>9.1%} "
             f"{statistics.fmean(margins):>+11.1f} "
             f"{statistics.median(margins):>+11.1f} "
-            f"{statistics.fmean(effs):>11.1%}"
+            f"{statistics.fmean(effs):>11.1%} "
+            f"{statistics.fmean(biases):>+8.1f}"
         )
 
     out["human_efficiency"] = dist(human_eff)
@@ -215,10 +334,19 @@ def main() -> None:
             f"{len(summaries) - len(engaged)} excluded)",
         )
 
+    attr = attribution(records, models)
+    print_attribution(attr, models)
+
     args.reports_dir.mkdir(parents=True, exist_ok=True)
     write_json(
         args.reports_dir / f"summary_{args.season}.json",
-        {"season": args.season, "all": full, "engaged": engaged_out, "leagues": summaries},
+        {
+            "season": args.season,
+            "all": full,
+            "engaged": engaged_out,
+            "attribution": attr,
+            "leagues": summaries,
+        },
     )
     csv_path = args.reports_dir / f"leagues_{args.season}.csv"
     with csv_path.open("w", newline="") as fh:

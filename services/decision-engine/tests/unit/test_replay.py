@@ -93,10 +93,12 @@ def _replay(
     context: LeagueContext | None = None,
     matchups: list[Matchup] | None = None,
     week: int = 3,
+    weekly_projections: dict[int, dict[str, dict[str, float]]] | None = None,
 ) -> WeekComparison:
     snapshot = make_snapshot(
         players=_players(),
         weekly_stats=_weekly(),
+        weekly_projections=weekly_projections,
         season=SEASON,
         weeks_included=(1, 2, 3),
     )
@@ -158,6 +160,34 @@ def test_pool_is_the_matchup_archive_not_the_current_roster() -> None:
     wr = next(p for p in result.slot_picks if p.slot_id == "WR1")
     assert wr.model_player_id == "wr_weak"
     assert set(result.league_context.user_roster.players) == {"wr_weak", "rb1"}
+
+
+def test_availability_gate_blocks_model_but_not_human_scoring() -> None:
+    """The strong WR has all the history but no week-3 projection entry
+    (out per Sleeper's pre-kickoff view): the model must not pick him.
+    The human who started the weak WR still gets his actual points —
+    the gate applies to the model's pool, never to scoring reality."""
+
+    result = _replay(
+        matchups=[
+            Matchup(
+                roster_id=1,
+                matchup_id=1,
+                players=("wr_strong", "wr_weak", "rb1"),
+                starters=("wr_strong",),
+            )
+        ],
+        weekly_projections={
+            3: {"wr_weak": {"gp": 1.0, "rec_yd": 20.0}},
+        },
+    )
+
+    wr = next(p for p in result.slot_picks if p.slot_id == "WR1")
+    assert wr.model_player_id == "wr_weak"
+    assert wr.human_player_id == "wr_strong"
+    # Human actual is the gated player's real week-3 line: 150*0.1+8.
+    assert result.human_actual == pytest.approx(23.0)
+    assert result.model_actual == pytest.approx(2.0)
 
 
 def test_no_stats_for_week_raises() -> None:

@@ -13,6 +13,7 @@ from typing import cast
 
 from decision_engine.core import pipeline as decide_pipeline
 from decision_engine.core.eligibility import NON_SELECTABLE_SLOTS
+from decision_engine.core.lineup import assign_lineup
 from decision_engine.core.pipeline import DecideRequest
 from decision_engine.types import NflState, Player, ScoredCandidate, SnapshotData
 from fastapi import APIRouter, Query
@@ -92,23 +93,20 @@ def get_decisions(
     avoid = avoid_team.upper() if avoid_team else None
     using_prior_season = False
     prior_season: int | None = None
-    # A player recommended for one starter slot must not be recommended
-    # for another (e.g. the best WR cannot fill WR1 AND FLEX). Track
-    # picks across slots and exclude them from subsequent decisions.
-    assigned_player_ids: set[str] = set()
     # A player's score is slot-independent, so share it across the slot
     # loop — with pool=waivers/both the WR/RB/TE/FLEX pools overlap by
     # thousands of players.
     score_cache: dict[str, ScoredCandidate] = {}
+    # (slot_id, slot, current starter pid) per selectable slot; picks
+    # are assigned after the loop, optimally over the whole lineup.
+    slot_rows: list[tuple[str, str, str | None]] = []
 
     for i, slot in enumerate(league_context.league.roster_positions):
         seen[slot] += 1
         slot_id = f"{slot}{seen[slot]}"
         if slot in NON_SELECTABLE_SLOTS:
             continue
-
-        current_pid = starters[i] if i < len(starters) else None
-        current_player = _player_lookup(snapshot, current_pid)
+        slot_rows.append((slot_id, slot, starters[i] if i < len(starters) else None))
 
         request = DecideRequest(
             user=user,
@@ -121,7 +119,6 @@ def get_decisions(
             prefer_team=prefer,
             avoid_team=avoid,
             state_override=state_override,
-            exclude_player_ids=frozenset(assigned_player_ids),
         )
 
         result = decide_pipeline.run(
@@ -137,18 +134,23 @@ def get_decisions(
             using_prior_season = True
             prior_season = result.prior_season
 
-        top_candidate = result.candidates[0] if result.candidates else None
+    # Optimal assignment over predicted points (PRD 3.3): one player per
+    # slot, maximizing the summed final_score, instead of the greedy
+    # in-league-order fill that burned e.g. the best QB in an early
+    # SUPER_FLEX slot.
+    assignment = assign_lineup([slot for _, slot, _ in slot_rows], score_cache)
+
+    for slot_id, slot, current_pid in slot_rows:
+        current_player = _player_lookup(snapshot, current_pid)
+        picked_pid = assignment.get(slot_id)
+        top_candidate = score_cache.get(picked_pid) if picked_pid else None
         if top_candidate is not None:
-            assigned_player_ids.add(top_candidate.player.player_id)
             sum_mean += top_candidate.score.projected_mean
             sum_variance += top_candidate.score.projected_variance ** 2
 
-        current_candidate = None
-        if current_pid is not None:
-            current_candidate = next(
-                (c for c in result.candidates if c.player.player_id == current_pid),
-                None,
-            )
+        current_candidate = (
+            score_cache.get(current_pid) if current_pid is not None else None
+        )
 
         decisions.append(
             SlotDecisionOut(

@@ -48,6 +48,13 @@ POSITIONS = ("QB", "RB", "WR", "TE")
 TOP_K = {"QB": 12, "RB": 24, "WR": 24, "TE": 12}
 STARTABLE_THRESHOLD = 8.0
 
+# Pseudo-model: predict the week straight from Sleeper's own pre-kickoff
+# stat-level projection, scored under PPR. Not in the registry — it
+# exists here as the PRD 3.1 leakage check (an MAE far below any honest
+# forecaster means the archive was back-filled post-hoc) and as the
+# floor the blend model must beat.
+SLEEPER_PSEUDO_MODEL = "sleeper"
+
 
 def evaluate(
     snapshot: SnapshotData, weeks: list[int], models: list[str]
@@ -78,17 +85,29 @@ def evaluate(
                 continue
             candidates[player.position].append(pid)
 
+        week_projections = trimmed.weekly_projections.get(week, {})
+
         for model in models:
-            score_fn = build_score_fn(model, trimmed)
+            if model == SLEEPER_PSEUDO_MODEL:
+                score_fn = None
+            else:
+                score_fn = build_score_fn(model, trimmed)
             for pos, pids in candidates.items():
                 preds: list[tuple[str, float, float]] = []
                 for pid in pids:
-                    history = pipeline._build_history(pid, trimmed, None)
-                    score = score_fn(
-                        snapshot.players[pid], history, PPR_SCORING, 0.5
-                    )
+                    if score_fn is None:
+                        proj = week_projections.get(pid)
+                        if proj is None:
+                            continue
+                        mu = weekly_points(proj, PPR_SCORING)
+                    else:
+                        history = pipeline._build_history(pid, trimmed, None)
+                        score = score_fn(
+                            snapshot.players[pid], history, PPR_SCORING, 0.5
+                        )
+                        mu = score.projected_mean
                     actual = weekly_points(actual_table[pid], PPR_SCORING)
-                    preds.append((pid, score.projected_mean, actual))
+                    preds.append((pid, mu, actual))
 
                 bucket = sums[model][pos]
                 for _pid, mu, actual in preds:

@@ -357,6 +357,72 @@ def test_bye_filter_keeps_players_without_a_team() -> None:
     assert pids == {"p1", "p2"}
 
 
+def test_snapshot_as_of_trims_projections_to_at_most_week() -> None:
+    """Stats stay < W; projections stay <= W (PRD 3.1 leakage contract)."""
+
+    snap = _snapshot_with_history().model_copy(
+        update={
+            "weekly_projections": {
+                1: {"p1": {"gp": 1.0}},
+                2: {"p1": {"gp": 1.0}},
+                3: {"p1": {"gp": 1.0}},
+                4: {"p1": {"gp": 1.0}},
+            }
+        }
+    )
+    trimmed = pipeline._snapshot_as_of(snap, 3)
+    assert set(trimmed.weekly_stats) == {1, 2}
+    assert trimmed.weeks_included == (1, 2)
+    assert set(trimmed.weekly_projections) == {1, 2, 3}
+
+
+def test_projected_to_play_gate() -> None:
+    table = {"p1": {"gp": 1.0}, "p2": {"gp": 0.0}, "p4": {"adp_dd_ppr": 999.0}}
+    assert pipeline._projected_to_play("p1", table)
+    assert not pipeline._projected_to_play("p2", table)  # positively out
+    assert not pipeline._projected_to_play("p3", table)  # absent entry
+    assert not pipeline._projected_to_play("p4", table)  # ADP noise only
+    # No projections for the week (old snapshot) -> unknown means startable.
+    assert pipeline._projected_to_play("p3", None)
+
+
+def test_availability_gate_removes_unprojected_players() -> None:
+    """p1 has history but no week-3 projection entry -> not startable;
+    p2 is projected to play and stays."""
+
+    snap = _snapshot_with_history().model_copy(
+        update={"weekly_projections": {3: {"p2": {"gp": 1.0, "rush_yd": 80.0}}}}
+    )
+    http = FakeHttp(league_routes(user_roster_players=("p1", "p2")))
+    reader = FakeSnapshotReader(snap)
+
+    result = pipeline.run(
+        http=http,
+        snapshot_reader=reader,
+        request=_make_request(slot="FLEX", pool="roster"),
+    )
+    pids = {c.player.player_id for c in result.candidates}
+    assert pids == {"p2"}
+
+
+def test_availability_gate_open_when_week_has_no_projections() -> None:
+    """Projections exist for other weeks but not week 3 -> gate open."""
+
+    snap = _snapshot_with_history().model_copy(
+        update={"weekly_projections": {1: {"p2": {"gp": 1.0}}}}
+    )
+    http = FakeHttp(league_routes(user_roster_players=("p1", "p2")))
+    reader = FakeSnapshotReader(snap)
+
+    result = pipeline.run(
+        http=http,
+        snapshot_reader=reader,
+        request=_make_request(slot="FLEX", pool="roster"),
+    )
+    pids = {c.player.player_id for c in result.candidates}
+    assert pids == {"p1", "p2"}
+
+
 def test_state_override_skips_state_call() -> None:
     snap = _snapshot_with_history()
     routes = league_routes()

@@ -1,0 +1,81 @@
+{
+  "league_id": "L1",
+  "name": "Synthetic League",
+  "roster_id": 1,
+  "owner_display_name": "synth",
+  "is_seed": false,
+  "weeks": {
+    "1": {
+      "models": {
+        "oldmodel": {
+          "predicted": 30.0,
+          "actual": 20.0
+        },
+        "newmodel": {
+          "predicted": 25.0,
+          "actual": 12.0,
+          "picks": [
+            {
+              "slot": "WR1",
+              "model": "ghost",
+              "human": "h_wr",
+              "model_predicted": 15.0,
+              "model_actual": 0.0,
+              "human_actual": 10.0,
+              "best_alt_actual": 8.0
+            },
+            {
+              "slot": "RB1",
+              "model": "rb_ok",
+              "human": "h_rb",
+              "model_predicted": 10.0,
+              "model_actual": 12.0,
+              "human_actual": 20.0,
+              "best_alt_actual": 5.0
+            }
+          ]
+        }
+      },
+      "human_actual": 30.0,
+      "perfect_actual": 40.0,
+      "using_prior_season": false,
+      "human_full_lineup": true
+    },
+    "2": {
+      "models": {
+        "oldmodel": {
+          "predicted": 28.0,
+          "actual": 25.0
+        },
+        "newmodel": {
+          "predicted": 26.0,
+          "actual": 31.0,
+          "picks": [
+            {
+              "slot": "WR1",
+              "model": "wr_good",
+              "human": "h_wr",
+              "model_predicted": 14.0,
+              "model_actual": 16.0,
+              "human_actual": 9.0,
+              "best_alt_actual": 4.0
+            },
+            {
+              "slot": "RB1",
+              "model": "h_rb",
+              "human": "h_rb",
+              "model_predicted": 12.0,
+              "model_actual": 15.0,
+              "human_actual": 15.0,
+              "best_alt_actual": 6.0
+            }
+          ]
+        }
+      },
+      "human_actual": 24.0,
+      "perfect_actual": 35.0,
+      "using_prior_season": false,
+      "human_full_lineup": true
+    }
+  }
+}
