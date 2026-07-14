@@ -156,6 +156,7 @@ export const ComparisonSchema = z.object({
   week: z.number(),
   model: z.string(),
   risk: z.number(),
+  pool: PoolSchema,
   slots: z.array(ComparisonSlotSchema),
   totals: z.object({
     model_predicted: z.number(),
@@ -279,6 +280,7 @@ export const api = {
     league_id: string
     user: string
     risk?: number
+    pool?: Pool
     model?: Model
     season?: number
     week?: number

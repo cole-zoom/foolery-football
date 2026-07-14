@@ -184,6 +184,7 @@ class ComparisonOut(BaseModel):
     week: int
     model: str
     risk: float
+    pool: Pool
     slots: list[ComparisonSlotOut]
     totals: ComparisonTotalsOut
     accuracy: ComparisonAccuracyOut

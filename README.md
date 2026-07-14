@@ -147,7 +147,10 @@ recommended lineup — none is cosmetic:
   with the model's report card: per-player predicted-vs-actual errors,
   MAE, signed bias, and the perfect-hindsight lineup ("points left on
   the bench"). The week-W roster comes from Sleeper's matchup archive,
-  so mid-season trades don't leak into the replay.
+  so mid-season trades don't leak into the replay. Honors the candidate
+  pool knob: with waivers in play it shows what the model could have
+  fielded off that week's wire — free agency judged by the week-W
+  matchup rosters, not today's.
 
 Decision-tied readouts: each slot shows **MATCH** (your starter is
 already optimal) or **SWAP +N** (projected points gained by benching

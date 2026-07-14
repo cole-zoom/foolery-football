@@ -406,23 +406,21 @@ function SessionView({
                 setPins({})
               }}
             />
-            {view === 'lineup' && (
-              <FieldSelect
-                label="POOL"
-                value={pool}
-                onChange={(v) => {
-                  setPool(v as Pool)
-                  setPins({})
-                }}
-                options={[
-                  { value: 'roster', label: 'My roster' },
-                  { value: 'both', label: 'Roster + waivers' },
-                  { value: 'waivers', label: 'Waivers only' },
-                ]}
-                size="sm"
-                triggerClassName="min-w-[150px]"
-              />
-            )}
+            <FieldSelect
+              label="POOL"
+              value={pool}
+              onChange={(v) => {
+                setPool(v as Pool)
+                setPins({})
+              }}
+              options={[
+                { value: 'roster', label: 'My roster' },
+                { value: 'both', label: 'Roster + waivers' },
+                { value: 'waivers', label: 'Waivers only' },
+              ]}
+              size="sm"
+              triggerClassName="min-w-[150px]"
+            />
             <FieldSelect
               label="MODEL"
               value={model}
@@ -471,6 +469,7 @@ function SessionView({
           week={week}
           model={model}
           risk={debouncedRisk}
+          pool={pool}
           onViewPlayer={setOpenPlayerId}
         />
       ) : (

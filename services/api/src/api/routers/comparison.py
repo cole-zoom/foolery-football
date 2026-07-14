@@ -8,13 +8,16 @@ using the league's own scoring weights. Also reports per-player
 prediction accuracy (predicted mean vs actual points) for the roster.
 
 Historical fidelity: the candidate pool and starters both come from the
-week-W matchup entry, not from /rosters — Sleeper's roster endpoint only
-returns *current* state, so mid-season trades and pickups would
-otherwise leak into the replay.
+week-W matchup entries, not from /rosters — Sleeper's roster endpoint
+only returns *current* state, so mid-season trades and pickups would
+otherwise leak into the replay. That holds for ``pool=waivers``/``both``
+too: the free-agent set is everyone outside the week-W matchup rosters,
+league-wide.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from collections import Counter
 from typing import cast
 
@@ -76,6 +79,7 @@ def get_comparison(
     prepare_season: PrepareSeasonDep,
     settings: SettingsDep,
     risk: float = Query(default=0.5, ge=0.0, le=1.0),
+    pool: Pool = Query(default="roster"),
     model: str = Query(default="naive"),
     season: int | None = Query(default=None),
     week: int | None = Query(default=None),
@@ -115,15 +119,34 @@ def get_comparison(
         )
 
     # Swap in the week-W roster/starters so both the model's pool and the
-    # "human" baseline are what actually existed that week. Empty fields
-    # (very old leagues) fall back to the live roster rather than abort.
+    # "human" baseline are what actually existed that week. Every roster
+    # is rebuilt, not just the user's: pool=waivers/both derives the free
+    # agent set from all_rostered_player_ids, which must reflect who was
+    # rostered *that week* — a player another team dropped since then was
+    # not on the wire in week W, and one they picked up since was. Empty
+    # fields (very old leagues) fall back to the live roster rather than
+    # abort.
+    matchup_by_roster = {m.roster_id: m for m in matchups}
+    week_rosters = tuple(
+        r.model_copy(
+            update={
+                "players": m.players or r.players,
+                "starters": m.starters or r.starters,
+            }
+        )
+        if (m := matchup_by_roster.get(r.roster_id)) is not None
+        else r
+        for r in league_context.rosters
+    )
     week_roster = league_context.user_roster.model_copy(
         update={
             "players": matchup.players or league_context.user_roster.players,
             "starters": matchup.starters or league_context.user_roster.starters,
         }
     )
-    league_context = league_context.model_copy(update={"user_roster": week_roster})
+    league_context = league_context.model_copy(
+        update={"rosters": week_rosters, "user_roster": week_roster}
+    )
 
     base = settings.headshot_base_url
     state_override = NflState(season=resolved_season, week=resolved_week)
@@ -169,7 +192,7 @@ def get_comparison(
             league_id=league_id,
             slot=slot,
             risk=risk,
-            pool=cast(Pool, "roster"),
+            pool=pool,
             limit=CANDIDATE_SEARCH_LIMIT,
             model=model,
             prefer_team=None,
@@ -191,6 +214,27 @@ def get_comparison(
 
         for c in result.candidates:
             predicted.setdefault(c.player.player_id, c.score.projected_mean)
+
+        if pool == "waivers":
+            # Waivers-only drops the user's own players from the run, but
+            # the "you" column and the report card still need their
+            # projections — harvest them from a roster-pool pass. The
+            # shared score cache makes this nearly free, and nothing from
+            # it feeds the model's pick.
+            roster_result = decide_pipeline.run(
+                http=http,
+                snapshot_reader=snapshot_reader,
+                request=dataclasses.replace(
+                    request,
+                    pool=cast(Pool, "roster"),
+                    exclude_player_ids=frozenset(),
+                ),
+                snapshot=snapshot,
+                league_context=league_context,
+                score_cache=score_cache,
+            )
+            for c in roster_result.candidates:
+                predicted.setdefault(c.player.player_id, c.score.projected_mean)
 
         top = result.candidates[0] if result.candidates else None
         if top is not None:
@@ -249,6 +293,7 @@ def get_comparison(
         week=resolved_week,
         model=model,
         risk=risk,
+        pool=pool,
         slots=slots_out,
         totals=ComparisonTotalsOut(
             model_predicted=model_predicted,

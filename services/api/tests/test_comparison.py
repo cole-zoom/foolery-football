@@ -35,6 +35,11 @@ def _players() -> dict[str, object]:
                                position="WR", fantasy_positions=("WR",), team="GB"),
         "rb1": make_player("rb1", full_name="RB One",
                            position="RB", fantasy_positions=("RB",), team="PIT"),
+        # Off the user's roster; only reachable through pool=waivers/both.
+        "wr_fa": make_player("wr_fa", full_name="Wire WR",
+                             position="WR", fantasy_positions=("WR",), team="KC"),
+        "wr_taken": make_player("wr_taken", full_name="Taken WR",
+                                position="WR", fantasy_positions=("WR",), team="SF"),
     }
 
 
@@ -45,12 +50,18 @@ def _weekly() -> dict[int, dict[str, dict[str, float]]]:
     return {
         1: {"wr_strong": {"rec_yd": 200.0, "rec": 10.0},
             "wr_weak": {"rec_yd": 20.0, "rec": 1.0},
-            "rb1": {"rush_yd": 80.0}},
+            "rb1": {"rush_yd": 80.0},
+            "wr_fa": {"rec_yd": 350.0, "rec": 5.0},
+            "wr_taken": {"rec_yd": 450.0, "rec": 5.0}},
         2: {"wr_strong": {"rec_yd": 220.0, "rec": 11.0},
             "wr_weak": {"rec_yd": 25.0, "rec": 2.0},
-            "rb1": {"rush_yd": 90.0}},
+            "rb1": {"rush_yd": 90.0},
+            "wr_fa": {"rec_yd": 350.0, "rec": 5.0},
+            "wr_taken": {"rec_yd": 450.0, "rec": 5.0}},
         3: {"wr_strong": {"rec_yd": 150.0, "rec": 8.0},
-            "wr_weak": {"rec_yd": 10.0, "rec": 1.0}},
+            "wr_weak": {"rec_yd": 10.0, "rec": 1.0},
+            "wr_fa": {"rec_yd": 100.0, "rec": 5.0},
+            "wr_taken": {"rec_yd": 250.0, "rec": 5.0}},
     }
 
 
@@ -60,6 +71,8 @@ def _routes(
     matchup_starters: tuple[str, ...] = ("wr_weak",),
     roster_positions: tuple[str, ...] = ("WR", "BN", "BN"),
     current_roster: tuple[str, ...] = ("wr_strong", "wr_weak", "rb1"),
+    other_current_roster: tuple[str, ...] = (),
+    other_matchup_players: tuple[str, ...] = ("someone_else",),
 ) -> dict[str, object]:
     routes = league_routes(
         season=SEASON,
@@ -67,6 +80,7 @@ def _routes(
         state_week=5,
         user_roster_players=current_roster,
         user_roster_starters=matchup_starters,
+        other_roster_players=other_current_roster,
         roster_positions=roster_positions,
         scoring_settings=dict(SCORING),
     )
@@ -81,8 +95,8 @@ def _routes(
         {
             "roster_id": 2,
             "matchup_id": 1,
-            "players": ["someone_else"],
-            "starters": ["someone_else"],
+            "players": list(other_matchup_players),
+            "starters": list(other_matchup_players),
             "points": 50.0,
         },
     ]
@@ -163,6 +177,58 @@ def test_accuracy_counts_only_players_who_played(make_client) -> None:
     assert acc["n"] == 2
     assert acc["mae"] == pytest.approx((8.5 + 1.75) / 2)
     assert acc["mean_error"] == pytest.approx((8.5 + 1.75) / 2)
+
+
+def test_pool_both_draws_from_the_week_w_waiver_wire(make_client) -> None:
+    """pool=both lets the model raid the wire, judged by *week-3* rosters:
+    wr_taken sat on the other team's week-3 matchup roster (untouchable,
+    despite the biggest projection and being off that roster *today*),
+    while wr_fa — on the other team's roster today but a free agent in
+    week 3 — is fair game and out-projects the user's own WRs."""
+
+    routes = _routes(
+        other_current_roster=("wr_fa", "someone_else"),
+        other_matchup_players=("wr_taken",),
+    )
+    client = make_client(http=FakeHttp(routes), snapshots=_snapshots())
+
+    body = _get(client, pool="both").json()
+    assert body["pool"] == "both"
+    wr = next(s for s in body["slots"] if s["slot_id"] == "WR1")
+    # wr_fa predicted (35+5)=40 beats wr_strong's 31.5; wr_taken's 50
+    # never enters the pool.
+    assert wr["model_pick"]["player"]["player_id"] == "wr_fa"
+    assert wr["model_pick"]["predicted_mean"] == pytest.approx(40.0)
+    # The human side is untouched by the pool knob.
+    assert wr["actual_starter"]["player"]["player_id"] == "wr_weak"
+
+    # Default pool stays roster-only.
+    body = _get(client).json()
+    assert body["pool"] == "roster"
+    wr = next(s for s in body["slots"] if s["slot_id"] == "WR1")
+    assert wr["model_pick"]["player"]["player_id"] == "wr_strong"
+
+
+def test_pool_waivers_keeps_the_report_card_projected(make_client) -> None:
+    """Waivers-only removes the user's players from the model's pool, but
+    the actual starter's projection, the human total, and the accuracy
+    stats must still be computed for the roster."""
+
+    client = make_client(http=FakeHttp(_routes()), snapshots=_snapshots())
+    body = _get(client, pool="waivers").json()
+
+    wr = next(s for s in body["slots"] if s["slot_id"] == "WR1")
+    # Both free agents are on the wire in week 3; wr_taken projects higher.
+    assert wr["model_pick"]["player"]["player_id"] == "wr_taken"
+    assert wr["model_pick"]["predicted_mean"] == pytest.approx(50.0)
+    # The human starter still carries a projection even though the model's
+    # pool never scored him: naive mean of wr_weak weeks 1-2 = 3.75.
+    assert wr["actual_starter"]["predicted_mean"] == pytest.approx(3.75)
+    assert body["totals"]["human_predicted"] == pytest.approx(3.75)
+    # Report card unchanged from the roster-pool runs.
+    acc = body["accuracy"]
+    assert acc["n"] == 2
+    assert acc["mae"] == pytest.approx((8.5 + 1.75) / 2)
 
 
 def test_uncompleted_week_is_a_400(make_client) -> None:

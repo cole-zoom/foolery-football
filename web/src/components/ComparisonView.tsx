@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, Swords, TrendingUp } from 'lucide-react'
-import { api, ApiError, type Comparison, type ComparisonPlayer, type Model } from '@/lib/api'
+import { api, ApiError, type Comparison, type ComparisonPlayer, type Model, type Pool } from '@/lib/api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { PositionChip } from '@/components/PositionChip'
 import { cn } from '@/lib/cn'
@@ -22,6 +22,12 @@ import { cn } from '@/lib/cn'
 const OVER_COLOR = 'var(--color-pos-qb)' // amber — model over-projected
 const UNDER_COLOR = 'var(--color-pos-wr)' // blue — model under-projected
 
+const POOL_PHRASE: Record<Pool, string> = {
+  roster: 'your roster',
+  both: 'your roster plus that week’s waivers',
+  waivers: 'that week’s waivers only',
+}
+
 export function ComparisonView({
   user,
   leagueId,
@@ -29,6 +35,7 @@ export function ComparisonView({
   week,
   model,
   risk,
+  pool,
   onViewPlayer,
 }: {
   user: string
@@ -37,11 +44,12 @@ export function ComparisonView({
   week: number | null
   model: Model
   risk: number
+  pool: Pool
   onViewPlayer: (playerId: string) => void
 }) {
   const q = useQuery({
     enabled: week !== null,
-    queryKey: ['comparison', leagueId, user, season, week, model, risk],
+    queryKey: ['comparison', leagueId, user, season, week, model, risk, pool],
     queryFn: () =>
       api.comparison({
         league_id: leagueId,
@@ -50,6 +58,7 @@ export function ComparisonView({
         week: week ?? undefined,
         model,
         risk,
+        pool,
       }),
     placeholderData: (prev) => prev,
     retry: (count, err) => !(err instanceof ApiError && err.status === 400) && count < 2,
@@ -67,8 +76,9 @@ export function ComparisonView({
           </h2>
           <p className="text-ink-8 text-sm mt-2 max-w-md leading-relaxed">
             What the <span className="text-ink-11">{model}</span> model would have started
-            (seeing only weeks before this one) versus what you actually fielded —
-            both scored by what really happened.
+            (seeing only weeks before this one, picking from{' '}
+            <span className="text-ink-11">{POOL_PHRASE[pool]}</span>) versus what you
+            actually fielded — both scored by what really happened.
           </p>
         </div>
         {data && <VerdictCard data={data} loading={q.isFetching} />}
