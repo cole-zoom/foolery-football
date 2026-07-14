@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Database, LayoutDashboard, Loader2, RotateCcw, Swords, TrendingUp } from 'lucide-react'
+import { ChartLine, Database, LayoutDashboard, Loader2, RotateCcw, Swords, TrendingUp } from 'lucide-react'
 import { api, MODELS, type Candidate, type Model, type Pool, type SlotDecision } from '@/lib/api'
 import { ComparisonView } from '@/components/ComparisonView'
+import { ModelsDashboard } from '@/components/ModelsDashboard'
 import { EntryForm } from '@/components/EntryForm'
 import { FieldSelect } from '@/components/FieldSelect'
 import { RiskKnob } from '@/components/RiskKnob'
@@ -22,7 +23,7 @@ type Session = {
 }
 
 type PinnedPick = { player: Candidate['player']; score: number }
-type View = 'lineup' | 'comparison'
+type View = 'lineup' | 'comparison' | 'models'
 
 const REGULAR_SEASON_LAST_WEEK = 18
 const RISK_DEBOUNCE_MS = 400
@@ -387,6 +388,12 @@ function SessionView({
                 icon={<Swords size={11} />}
                 label="MODEL VS YOU"
               />
+              <ViewTab
+                active={view === 'models'}
+                onClick={() => setView('models')}
+                icon={<ChartLine size={11} />}
+                label="MODEL BENCH"
+              />
             </div>
           </div>
 
@@ -399,13 +406,15 @@ function SessionView({
               }}
               options={seasonOptions}
             />
-            <WeekPicker
-              value={week ?? 1}
-              onChange={(w) => {
-                setWeek(w)
-                setPins({})
-              }}
-            />
+            {view !== 'models' && (
+              <WeekPicker
+                value={week ?? 1}
+                onChange={(w) => {
+                  setWeek(w)
+                  setPins({})
+                }}
+              />
+            )}
             <FieldSelect
               label="POOL"
               value={pool}
@@ -421,17 +430,19 @@ function SessionView({
               size="sm"
               triggerClassName="min-w-[150px]"
             />
-            <FieldSelect
-              label="MODEL"
-              value={model}
-              onChange={(v) => {
-                setModel(v as Model)
-                setPins({})
-              }}
-              options={MODELS.map((m) => ({ value: m.value, label: m.label }))}
-              size="sm"
-              triggerClassName="min-w-[170px]"
-            />
+            {view !== 'models' && (
+              <FieldSelect
+                label="MODEL"
+                value={model}
+                onChange={(v) => {
+                  setModel(v as Model)
+                  setPins({})
+                }}
+                options={MODELS.map((m) => ({ value: m.value, label: m.label }))}
+                size="sm"
+                triggerClassName="min-w-[170px]"
+              />
+            )}
             <Divider />
             <RiskKnob value={risk} onChange={setRisk} pending={riskPending} />
             <Divider />
@@ -461,7 +472,15 @@ function SessionView({
       </header>
 
       {/* Main */}
-      {view === 'comparison' ? (
+      {view === 'models' ? (
+        <ModelsDashboard
+          user={session.username}
+          leagueId={session.leagueId}
+          season={session.season}
+          risk={debouncedRisk}
+          pool={pool}
+        />
+      ) : view === 'comparison' ? (
         <ComparisonView
           user={session.username}
           leagueId={session.leagueId}
