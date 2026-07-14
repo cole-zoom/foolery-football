@@ -1,44 +1,22 @@
 """GET /leagues/{id}/comparison — model hindsight vs the human's real lineup.
 
-For a completed week W this replays the model's recommended lineup under
-the same leakage-safe contract as /decisions (scoring sees only weeks
-before W), pulls the lineup the manager *actually* fielded from
-Sleeper's matchup archive, and scores both against what really happened
-using the league's own scoring weights. Also reports per-player
-prediction accuracy (predicted mean vs actual points) for the roster.
-
-Historical fidelity: the candidate pool and starters both come from the
-week-W matchup entries, not from /rosters — Sleeper's roster endpoint
-only returns *current* state, so mid-season trades and pickups would
-otherwise leak into the replay. That holds for ``pool=waivers``/``both``
-too: the free-agent set is everyone outside the week-W matchup rosters,
-league-wide.
+The replay itself (leakage-safe scoring, week-W matchup-archive roster
+swap, slot-by-slot assembly, perfect-hindsight DP) lives in
+``decision_engine.core.replay`` and is shared with the offline eval
+harness. This router resolves live state, fetches the league context
+and matchup archive, runs the replay, and decorates the result with
+wire-format player rows plus per-player prediction accuracy.
 """
 
 from __future__ import annotations
 
-import dataclasses
-from collections import Counter
-from typing import cast
-
-from decision_engine.core import pipeline as decide_pipeline
-from decision_engine.core.eligibility import (
-    NON_SELECTABLE_SLOTS,
-    player_eligible_for_slot,
-)
 from decision_engine.core.league_fetch import (
     UserInputError,
     fetch_matchups,
 )
-from decision_engine.core.pipeline import DecideRequest
+from decision_engine.core.replay import replay_week_comparison
 from decision_engine.core.scoring.common import weekly_points
-from decision_engine.types import (
-    NflState,
-    Pool,
-    ScoredCandidate,
-    ScoringSettings,
-    SnapshotData,
-)
+from decision_engine.types import Pool
 from fastapi import APIRouter, Query
 from ffdm_app.types import LiveState
 
@@ -64,10 +42,6 @@ from api.schemas import (
 )
 
 router = APIRouter(tags=["comparison"])
-
-# Above this many starter slots the exact perfect-lineup search (bitmask
-# DP over slots) stops being cheap; no real league gets close.
-PERFECT_LINEUP_MAX_SLOTS = 14
 
 
 @router.get("/leagues/{league_id}/comparison", response_model=ComparisonOut)
@@ -95,6 +69,8 @@ def get_comparison(
     prepare_season(resolved_season, live_state)
     snapshot = snapshot_reader.load(resolved_season)
 
+    # Fail before any league fetch — same check replay repeats, kept here
+    # so an incomplete week never costs Sleeper round-trips.
     actual_table = snapshot.weekly_stats.get(resolved_week)
     if not actual_table:
         raise UserInputError(
@@ -108,54 +84,30 @@ def get_comparison(
     scoring = league_context.league.scoring_settings
 
     matchups = fetch_matchups(http, league_id=league_id, week=resolved_week)
-    matchup = next(
-        (m for m in matchups if m.roster_id == league_context.user_roster.roster_id),
-        None,
-    )
-    if matchup is None:
+    if not any(
+        m.roster_id == league_context.user_roster.roster_id for m in matchups
+    ):
         raise UserInputError(
             f"no week-{resolved_week} matchup found for {user!r} in league "
             f"{league_id} — the league may not have played that week"
         )
 
-    # Swap in the week-W roster/starters so both the model's pool and the
-    # "human" baseline are what actually existed that week. Every roster
-    # is rebuilt, not just the user's: pool=waivers/both derives the free
-    # agent set from all_rostered_player_ids, which must reflect who was
-    # rostered *that week* — a player another team dropped since then was
-    # not on the wire in week W, and one they picked up since was. Empty
-    # fields (very old leagues) fall back to the live roster rather than
-    # abort.
-    matchup_by_roster = {m.roster_id: m for m in matchups}
-    week_rosters = tuple(
-        r.model_copy(
-            update={
-                "players": m.players or r.players,
-                "starters": m.starters or r.starters,
-            }
-        )
-        if (m := matchup_by_roster.get(r.roster_id)) is not None
-        else r
-        for r in league_context.rosters
-    )
-    week_roster = league_context.user_roster.model_copy(
-        update={
-            "players": matchup.players or league_context.user_roster.players,
-            "starters": matchup.starters or league_context.user_roster.starters,
-        }
-    )
-    league_context = league_context.model_copy(
-        update={"rosters": week_rosters, "user_roster": week_roster}
+    result = replay_week_comparison(
+        http=http,
+        snapshot_reader=snapshot_reader,
+        snapshot=snapshot,
+        league_context=league_context,
+        matchups=matchups,
+        season=resolved_season,
+        week=resolved_week,
+        model=model,
+        risk=risk,
+        pool=pool,
+        candidate_limit=CANDIDATE_SEARCH_LIMIT,
     )
 
     base = settings.headshot_base_url
-    state_override = NflState(season=resolved_season, week=resolved_week)
-
-    # projected_mean per player_id, pooled across every slot run — a
-    # player's mean is slot-independent, so first sighting wins. Fills in
-    # predictions for actual starters even when a slot run excluded them
-    # (already assigned to an earlier slot).
-    predicted: dict[str, float] = {}
+    predicted = result.predicted_mean
 
     def row(player_id: str | None) -> ComparisonPlayerOut | None:
         if not player_id:
@@ -170,117 +122,22 @@ def get_comparison(
             actual_points=weekly_points(stats, scoring) if stats else None,
         )
 
-    starters = list(week_roster.starters)
-    seen: Counter[str] = Counter()
-    assigned_player_ids: set[str] = set()
-    # Scores are slot-independent; share them across the slot loop.
-    score_cache: dict[str, ScoredCandidate] = {}
-    slot_picks: list[tuple[str, str, str | None, str | None]] = []
-    selectable_slots: list[str] = []
-    using_prior_season = False
-    prior_season: int | None = None
-
-    for i, slot in enumerate(league_context.league.roster_positions):
-        seen[slot] += 1
-        slot_id = f"{slot}{seen[slot]}"
-        if slot in NON_SELECTABLE_SLOTS:
-            continue
-        selectable_slots.append(slot)
-
-        request = DecideRequest(
-            user=user,
-            league_id=league_id,
-            slot=slot,
-            risk=risk,
-            pool=pool,
-            limit=CANDIDATE_SEARCH_LIMIT,
-            model=model,
-            prefer_team=None,
-            avoid_team=None,
-            state_override=state_override,
-            exclude_player_ids=frozenset(assigned_player_ids),
+    slots_out = [
+        ComparisonSlotOut(
+            slot_id=pick.slot_id,
+            slot=pick.slot,
+            model_pick=row(pick.model_player_id),
+            actual_starter=row(pick.human_player_id),
+            same_player=(
+                pick.model_player_id is not None
+                and pick.human_player_id is not None
+                and pick.model_player_id == pick.human_player_id
+            ),
         )
-        result = decide_pipeline.run(
-            http=http,
-            snapshot_reader=snapshot_reader,
-            request=request,
-            snapshot=snapshot,
-            league_context=league_context,
-            score_cache=score_cache,
-        )
-        if result.using_prior_season:
-            using_prior_season = True
-            prior_season = result.prior_season
+        for pick in result.slot_picks
+    ]
 
-        for c in result.candidates:
-            predicted.setdefault(c.player.player_id, c.score.projected_mean)
-
-        if pool == "waivers":
-            # Waivers-only drops the user's own players from the run, but
-            # the "you" column and the report card still need their
-            # projections — harvest them from a roster-pool pass. The
-            # shared score cache makes this nearly free, and nothing from
-            # it feeds the model's pick.
-            roster_result = decide_pipeline.run(
-                http=http,
-                snapshot_reader=snapshot_reader,
-                request=dataclasses.replace(
-                    request,
-                    pool=cast(Pool, "roster"),
-                    exclude_player_ids=frozenset(),
-                ),
-                snapshot=snapshot,
-                league_context=league_context,
-                score_cache=score_cache,
-            )
-            for c in roster_result.candidates:
-                predicted.setdefault(c.player.player_id, c.score.projected_mean)
-
-        top = result.candidates[0] if result.candidates else None
-        if top is not None:
-            assigned_player_ids.add(top.player.player_id)
-
-        starter_pid = starters[i] if i < len(starters) else None
-        slot_picks.append(
-            (
-                slot_id,
-                slot,
-                top.player.player_id if top else None,
-                starter_pid,
-            )
-        )
-
-    # Rows are built after the loop so every player carries the pooled
-    # prediction, not just what the model had seen by their slot's turn.
-    slots_out: list[ComparisonSlotOut] = []
-    model_predicted = 0.0
-    model_actual = 0.0
-    human_predicted_parts: list[float] = []
-    human_actual = 0.0
-    for slot_id, slot, pick_pid, starter_pid in slot_picks:
-        model_pick = row(pick_pid)
-        actual_starter = row(starter_pid)
-        if model_pick is not None:
-            model_predicted += model_pick.predicted_mean or 0.0
-            model_actual += model_pick.actual_points or 0.0
-        if actual_starter is not None:
-            if actual_starter.predicted_mean is not None:
-                human_predicted_parts.append(actual_starter.predicted_mean)
-            human_actual += actual_starter.actual_points or 0.0
-        slots_out.append(
-            ComparisonSlotOut(
-                slot_id=slot_id,
-                slot=slot,
-                model_pick=model_pick,
-                actual_starter=actual_starter,
-                same_player=(
-                    pick_pid is not None
-                    and starter_pid is not None
-                    and pick_pid == starter_pid
-                ),
-            )
-        )
-
+    week_roster = result.league_context.user_roster
     roster_rows = [r for pid in week_roster.players if (r := row(pid)) is not None]
     errors = [
         r.predicted_mean - r.actual_points
@@ -296,19 +153,11 @@ def get_comparison(
         pool=pool,
         slots=slots_out,
         totals=ComparisonTotalsOut(
-            model_predicted=model_predicted,
-            model_actual=model_actual,
-            human_predicted=(
-                sum(human_predicted_parts) if human_predicted_parts else None
-            ),
-            human_actual=human_actual,
-            perfect_actual=_perfect_lineup_total(
-                selectable_slots,
-                week_roster.players,
-                snapshot,
-                actual_table,
-                scoring,
-            ),
+            model_predicted=result.model_predicted,
+            model_actual=result.model_actual,
+            human_predicted=result.human_predicted,
+            human_actual=result.human_actual,
+            perfect_actual=result.perfect_actual,
         ),
         accuracy=ComparisonAccuracyOut(
             n=len(errors),
@@ -316,66 +165,6 @@ def get_comparison(
             mean_error=sum(errors) / len(errors) if errors else None,
         ),
         roster=roster_rows,
-        using_prior_season=using_prior_season,
-        prior_season=prior_season,
+        using_prior_season=result.using_prior_season,
+        prior_season=result.prior_season,
     )
-
-
-def _perfect_lineup_total(
-    slots: list[str],
-    roster_player_ids: tuple[str, ...],
-    snapshot: SnapshotData,
-    actual_table: dict[str, dict[str, float]],
-    scoring: ScoringSettings,
-) -> float | None:
-    """Best actual total the roster could have produced with hindsight.
-
-    Exact assignment via DP over the bitmask of filled slots: for each
-    player (used at most once) try every eligible still-empty slot.
-    Masks are visited descending so a player can't fill two slots in the
-    same pass. Prefers a full lineup when one exists — an empty slot is
-    only "better" when a starter scored negative, which isn't a lineup a
-    manager could field.
-    """
-
-    n = len(slots)
-    if n == 0 or n > PERFECT_LINEUP_MAX_SLOTS:
-        return None
-
-    scored: list[tuple[list[int], float]] = []
-    for pid in roster_player_ids:
-        player = snapshot.players.get(pid)
-        stats = actual_table.get(pid)
-        if player is None or not stats:
-            continue
-        eligible_bits = [
-            b for b, slot in enumerate(slots) if player_eligible_for_slot(player, slot)
-        ]
-        if not eligible_bits:
-            continue
-        scored.append((eligible_bits, weekly_points(stats, scoring)))
-
-    if not scored:
-        return None
-
-    neg_inf = float("-inf")
-    dp = [neg_inf] * (1 << n)
-    dp[0] = 0.0
-    for eligible_bits, points in scored:
-        for mask in range((1 << n) - 1, -1, -1):
-            if dp[mask] == neg_inf:
-                continue
-            for b in eligible_bits:
-                bit = 1 << b
-                if mask & bit:
-                    continue
-                candidate = dp[mask] + points
-                if candidate > dp[mask | bit]:
-                    dp[mask | bit] = candidate
-
-    # Fullest reachable lineup wins; total breaks ties.
-    best_mask = max(
-        (m for m in range(1 << n) if dp[m] > neg_inf),
-        key=lambda m: (m.bit_count(), dp[m]),
-    )
-    return dp[best_mask]
