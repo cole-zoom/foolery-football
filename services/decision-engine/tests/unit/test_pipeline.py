@@ -493,6 +493,57 @@ def test_heuristic_availability_skips_bye_weeks_when_looking_back() -> None:
     assert {c.player.player_id for c in result.candidates} == {"p1", "p2"}
 
 
+def test_news_availability_benches_out_and_doubtful_only() -> None:
+    """availability=news: heuristic base plus the official report —
+    p1 is Out for week 3 -> benched; p2 Questionable -> startable."""
+
+    snap = _snapshot_with_history().model_copy(
+        update={
+            "weekly_injuries": {
+                3: {"p1": "Out", "p2": "Questionable"},
+                # Week-2 report about p2 must not leak into week 3.
+                2: {"p2": "Out"},
+            }
+        }
+    )
+    http = FakeHttp(league_routes(user_roster_players=("p1", "p2")))
+    reader = FakeSnapshotReader(snap)
+
+    result = pipeline.run(
+        http=http,
+        snapshot_reader=reader,
+        request=dataclasses.replace(
+            _make_request(slot="FLEX", pool="roster"), availability="news"
+        ),
+    )
+    assert {c.player.player_id for c in result.candidates} == {"p2"}
+
+
+def test_news_availability_without_report_matches_heuristic() -> None:
+    """No injuries artifact: news mode degrades to the heuristic."""
+
+    snap = _snapshot_with_history()
+    http = FakeHttp(league_routes(user_roster_players=("p1", "p2")))
+    reader = FakeSnapshotReader(snap)
+
+    result = pipeline.run(
+        http=http,
+        snapshot_reader=reader,
+        request=dataclasses.replace(
+            _make_request(slot="FLEX", pool="roster"), availability="news"
+        ),
+    )
+    assert {c.player.player_id for c in result.candidates} == {"p1", "p2"}
+
+
+def test_snapshot_as_of_trims_injuries_to_at_most_week() -> None:
+    snap = _snapshot_with_history().model_copy(
+        update={"weekly_injuries": {2: {"p1": "Out"}, 3: {"p1": "Out"}, 4: {"p1": "Out"}}}
+    )
+    trimmed = pipeline._snapshot_as_of(snap, 3)
+    assert set(trimmed.weekly_injuries) == {2, 3}
+
+
 def test_heuristic_availability_open_when_no_history() -> None:
     """Week 1 (nothing trimmed in): everyone is startable."""
 

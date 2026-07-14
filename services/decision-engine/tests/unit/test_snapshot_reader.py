@@ -265,6 +265,43 @@ def test_partial_projection_files_load_what_exists(tmp_path: Path) -> None:
     assert set(snap.weekly_projections) == {2}
 
 
+def test_loads_injuries_artifact(tmp_path: Path) -> None:
+    snap_dir = _write_snapshot(
+        tmp_path,
+        season=2025,
+        manifest=_basic_manifest(season=2025, weeks=[1]),
+        players={"p1": {"player_id": "p1", "full_name": "X", "fantasy_positions": ["WR"]}},
+        weekly={1: {"p1": {"rec_yd": 50.0}}},
+    )
+    (snap_dir / "injuries.json").write_text(
+        json.dumps(
+            {
+                "2": {
+                    "p1": {"report_status": "Out", "practice_status": ""},
+                    "p2": {"report_status": "Questionable"},
+                    "bad": "not-an-object",
+                },
+                "not-a-week": {"p1": {"report_status": "Out"}},
+            }
+        )
+    )
+    reader = FilesystemSnapshotReader(tmp_path, supported_schema_version=1)
+    snap = reader.load(2025)
+    assert snap.weekly_injuries == {2: {"p1": "Out", "p2": "Questionable"}}
+
+
+def test_injuries_absent_yields_empty_mapping(tmp_path: Path) -> None:
+    _write_snapshot(
+        tmp_path,
+        season=2025,
+        manifest=_basic_manifest(season=2025, weeks=[1]),
+        players={"p1": {"player_id": "p1", "full_name": "X", "fantasy_positions": ["WR"]}},
+        weekly={1: {"p1": {"rec_yd": 50.0}}},
+    )
+    reader = FilesystemSnapshotReader(tmp_path, supported_schema_version=1)
+    assert reader.load(2025).weekly_injuries == {}
+
+
 def test_loads_prior_season_when_bootstrapped(tmp_path: Path) -> None:
     _write_snapshot(
         tmp_path,

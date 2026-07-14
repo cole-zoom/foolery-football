@@ -13,6 +13,7 @@
 
 ## References
 - [Sleeper API endpoint inventory](references/sleeper-api.md) — including endpoints the official docs omit.
+- [External data sources](references/external-data.md) — nflverse injury reports + player-ID crosswalk (non-Sleeper inputs).
 - [Fantasy football glossary](references/fantasy-glossary.md) — what every domain term means in this codebase.
 - [2026 NFL week 1 schedule](references/nfl-2026-week-1.md) — test fixture.
 

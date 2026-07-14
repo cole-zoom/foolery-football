@@ -171,9 +171,17 @@ def run(
         else None
     )
 
+    week_injuries = snapshot.weekly_injuries.get(state.week)
+
     def available(pid: str) -> bool:
         if request.availability == "heuristic":
             return _played_recently(snapshot.players[pid], snapshot)
+        if request.availability == "news":
+            return _played_recently(
+                snapshot.players[pid], snapshot
+            ) and not _ruled_out(pid, week_injuries)
+        if request.availability == "none":
+            return True
         return _projected_to_play(pid, week_projections)
 
     eligible: list[Player] = [
@@ -301,6 +309,20 @@ def _played_recently(player: Player, snapshot: SnapshotData) -> bool:
     return True
 
 
+def _ruled_out(player_id: str, week_injuries: dict[str, str] | None) -> bool:
+    """True when the official week-W injury report benches the player.
+
+    "Out" is definitive; "Doubtful" players historically play ~25% of
+    the time — benching them is the right lineup call. "Questionable"
+    (~75% play rate) stays startable. No report table for the week
+    (pre-artifact snapshot, unmapped player) — not ruled out.
+    """
+
+    if week_injuries is None:
+        return False
+    return week_injuries.get(player_id) in ("Out", "Doubtful")
+
+
 def _plays_in_week(player: Player, week_games: dict[str, str] | None) -> bool:
     """False only when the schedule positively shows a bye.
 
@@ -331,11 +353,15 @@ def _snapshot_as_of(snapshot: SnapshotData, week: int) -> SnapshotData:
     projections = {
         w: p for w, p in snapshot.weekly_projections.items() if w <= week
     }
+    # Injury reports share the projection rule: week W's report is
+    # published pre-kickoff, so weeks <= W are fair game.
+    injuries = {w: t for w, t in snapshot.weekly_injuries.items() if w <= week}
     return snapshot.model_copy(
         update={
             "weekly_stats": weekly,
             "weeks_included": weeks,
             "weekly_projections": projections,
+            "weekly_injuries": injuries,
         }
     )
 

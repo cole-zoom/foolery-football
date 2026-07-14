@@ -67,11 +67,25 @@ projections there is no honest signal; documented limitation.
 ## Availability heuristic (run B)
 
 New `DecideRequest.availability` knob: `"sleeper"` (default, PRD 3.1
-gate) | `"heuristic"` | `"none"`. Heuristic: startable iff the player
-recorded a stat row in his team's most recent completed game (bye
-weeks skipped via the schedule); no completed games yet → startable.
-Model-agnostic, same quarantine-over-drop conventions as the other
-pool filters.
+gate) | `"heuristic"` | `"news"` | `"none"`. Heuristic: startable iff
+the player recorded a stat row in his team's most recent completed
+game (bye weeks skipped via the schedule); no completed games yet →
+startable. Model-agnostic, same quarantine-over-drop conventions as
+the other pool filters.
+
+## Free injury news (run C)
+
+`"news"` = the heuristic plus the official NFL injury report: players
+designated **Out or Doubtful** for week W are benched (Questionable
+plays ~75% of the time and stays startable). The report is the
+league's own pre-kickoff publication, archived by nflverse (free — see
+[external-data.md](../references/external-data.md)), joined to Sleeper
+IDs via the dynastyprocess crosswalk at fetch time
+(`scripts/fetch-injuries.py` → `injuries.json` per season →
+`SnapshotData.weekly_injuries`, trimmed to ≤ W like projections).
+Run C measures how much of the A−B gap free public injury news
+recovers; the remainder is Sleeper's private signal (healthy
+scratches, depth-chart demotions, game-day inactives).
 
 ## Acceptance
 

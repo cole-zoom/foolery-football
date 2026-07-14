@@ -134,9 +134,9 @@ def main() -> None:
     parser.add_argument(
         "--availability",
         default="sleeper",
-        choices=("sleeper", "heuristic", "none"),
-        help="availability gate source (milestone 4 run B uses 'heuristic'; "
-        "pair non-default modes with a separate --results-dir)",
+        choices=("sleeper", "heuristic", "news", "none"),
+        help="availability gate source (milestone 4 run B uses 'heuristic', "
+        "run C 'news'; pair non-default modes with a separate --results-dir)",
     )
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR)
     parser.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS_DIR)
