@@ -39,12 +39,15 @@ from common import (
     write_json,
 )
 from decision_engine.clients.snapshot_reader import FilesystemSnapshotReader
+from decision_engine.core.eligibility import player_eligible_for_slot
 from decision_engine.core.league_fetch import (
     UserInputError,
     fetch_league_context_by_roster,
     fetch_matchups,
 )
-from decision_engine.core.replay import replay_week_comparison
+from decision_engine.core.replay import WeekComparison, replay_week_comparison
+from decision_engine.core.scoring.common import weekly_points
+from decision_engine.types import SnapshotData
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_RESULTS_DIR = Path(__file__).parent / "results"
@@ -61,6 +64,61 @@ def load_results(path: Path, entry: dict[str, Any]) -> dict[str, Any]:
         "is_seed": entry.get("is_seed", False),
         "weeks": {},
     }
+
+
+def picks_payload(
+    result: WeekComparison, snapshot: SnapshotData
+) -> list[dict[str, Any]]:
+    """Per-slot picks for the results file (PRD 3.4 attribution).
+
+    ``best_alt_actual`` is the best actual score among week-W roster
+    players eligible for the slot and *not* in the model's lineup — the
+    points a ghost start left on the bench. Persisted here because the
+    aggregate step has no roster/eligibility data.
+    """
+
+    actual_table = snapshot.weekly_stats.get(result.week, {})
+    scoring = result.league_context.league.scoring_settings
+    roster = result.league_context.user_roster.players
+    model_lineup = {p.model_player_id for p in result.slot_picks if p.model_player_id}
+
+    def actual_of(pid: str | None) -> float | None:
+        if not pid or pid not in snapshot.players:
+            return None
+        stats = actual_table.get(pid)
+        return round(weekly_points(stats, scoring), 2) if stats else None
+
+    picks: list[dict[str, Any]] = []
+    for p in result.slot_picks:
+        best_alt = 0.0
+        for pid in roster:
+            if pid in model_lineup:
+                continue
+            player = snapshot.players.get(pid)
+            if player is None or not player_eligible_for_slot(player, p.slot):
+                continue
+            alt = actual_of(pid)
+            if alt is not None and alt > best_alt:
+                best_alt = alt
+        model_predicted = (
+            result.predicted_mean.get(p.model_player_id)
+            if p.model_player_id
+            else None
+        )
+        picks.append(
+            {
+                "slot": p.slot_id,
+                "model": p.model_player_id,
+                "human": p.human_player_id,
+                "model_predicted": (
+                    round(model_predicted, 2) if model_predicted is not None else None
+                ),
+                "model_actual": actual_of(p.model_player_id),
+                "human_actual": actual_of(p.human_player_id),
+                "best_alt_actual": round(best_alt, 2),
+            }
+        )
+    return picks
 
 
 def main() -> None:
@@ -170,6 +228,7 @@ def main() -> None:
                 week_rec["models"][model] = {
                     "predicted": round(result.model_predicted, 2),
                     "actual": round(result.model_actual, 2),
+                    "picks": picks_payload(result, snapshot),
                 }
                 # Model-independent columns; first model writes, others verify.
                 for key, value in (

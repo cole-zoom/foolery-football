@@ -15,9 +15,11 @@ Snapshot format is the contract in
   (``weeks_included``).
 - ``<root>/<season>/stats_prior_season.json`` — present iff
   ``prior_season_bootstrapped`` is true.
-
-Projection files are written by the loader but the naive scoring model
-does not consume them. They're still part of the snapshot contract.
+- ``<root>/<season>/projections_week_<W>.json`` — Sleeper's pre-kickoff
+  stat-level projections, one per week the loader has seen (weeks in
+  ``weeks_included`` plus ``upcoming_week_projection``). Optional per
+  week — old snapshots without them load with empty
+  ``weekly_projections``.
 
 The ``FilesystemSnapshotReader`` lives here; the GCS-backed equivalent
 lives in the api package so this package stays free of cloud SDKs.
@@ -194,6 +196,18 @@ def assemble_snapshot(
             _as_object(load_json(name), name, location_label), label=name
         )
 
+    weekly_projections: dict[int, dict[str, dict[str, float]]] = {}
+    projection_weeks = set(weeks)
+    if upcoming_week is not None:
+        projection_weeks.add(upcoming_week)
+    for week in sorted(projection_weeks):
+        name = f"projections_week_{week}.json"
+        if not has_object(name):
+            continue
+        weekly_projections[week] = _coerce_stats(
+            _as_object(load_json(name), name, location_label), label=name
+        )
+
     prior_season_stats: dict[str, dict[str, float]] = {}
     if prior_bootstrapped:
         if has_object(PRIOR_SEASON_NAME):
@@ -225,6 +239,7 @@ def assemble_snapshot(
         upcoming_week_projection=upcoming_week,
         players=players,
         weekly_stats=weekly_stats,
+        weekly_projections=weekly_projections,
         prior_season_stats=prior_season_stats,
         schedule=schedule,
         home_teams=home_teams,

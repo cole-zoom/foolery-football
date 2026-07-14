@@ -154,6 +154,14 @@ class SnapshotData(BaseModel):
     upcoming_week_projection: int | None
     players: dict[str, Player]
     weekly_stats: dict[int, dict[str, dict[str, float]]] = Field(default_factory=dict)
+    # week -> player_id -> stat-level projection, same stat codes as
+    # weekly_stats. Sleeper publishes these pre-kickoff, so the leakage
+    # contract is: predicting week W may see projections for weeks <= W
+    # (stats stay strictly < W). Empty for snapshots without projection
+    # files.
+    weekly_projections: dict[int, dict[str, dict[str, float]]] = Field(
+        default_factory=dict
+    )
     prior_season_stats: dict[str, dict[str, float]] = Field(default_factory=dict)
     # week -> team -> opponent, both directions of every game. Built from
     # the optional ``schedule.json`` artifact; empty for snapshots taken

@@ -25,3 +25,8 @@
   - [2.1 — Sleeper league fetch](product-specs/milestone-2/2.1-sleeper-league-fetch.md)
   - [2.2 — Scoring model](product-specs/milestone-2/2.2-scoring-model.md)
   - [2.3 — CLI output](product-specs/milestone-2/2.3-cli-output.md)
+- [Milestone 3 — Model upgrade: close the gap to the median human](product-specs/milestone-3-model-upgrade.md)
+  - [3.1 — Projections plumbing + availability gate](product-specs/milestone-3/3.1-projections-and-availability-gate.md)
+  - [3.2 — Blend model](product-specs/milestone-3/3.2-blend-model.md)
+  - [3.3 — Lineup assembly](product-specs/milestone-3/3.3-lineup-assembly.md)
+  - [3.4 — Eval attribution + ship gate](product-specs/milestone-3/3.4-eval-attribution-and-ship-gate.md)

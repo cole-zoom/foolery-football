@@ -155,6 +155,10 @@ def run(
     # team has no week-``state.week`` game can only score zero. Applies
     # to live recommendations and replays alike.
     week_games = snapshot.schedule.get(state.week) or None
+    # Availability gate: a player with no week-W projection entry is not
+    # startable (injured/inactive/demoted per Sleeper's pre-kickoff
+    # view). Model-agnostic — applies to every pool and every model.
+    week_projections = snapshot.weekly_projections.get(state.week)
     eligible: list[Player] = [
         snapshot.players[pid]
         for pid in pool_player_ids
@@ -162,6 +166,7 @@ def run(
         and pid in snapshot.players
         and player_eligible_for_slot(snapshot.players[pid], request.slot)
         and _plays_in_week(snapshot.players[pid], week_games)
+        and _projected_to_play(pid, week_projections)
     ]
     log.info(
         "Pool=%s slot=%s -> %d eligible candidates (of %d pooled)",
@@ -235,6 +240,24 @@ def _build_pool(
     return [pid for pid in snapshot.players if pid not in rostered_others]
 
 
+def _projected_to_play(
+    player_id: str, week_projections: dict[str, dict[str, float]] | None
+) -> bool:
+    """False only when the projection table positively says 'out'.
+
+    ``week_projections`` is the target week's table, or None when the
+    snapshot has no projections for that week (old snapshot, offseason)
+    — unknown means startable, same as the bye filter. A player Sleeper
+    does not expect to play has no meaningful entry: either absent from
+    the table or an entry with no ``gp`` (ADP noise only).
+    """
+
+    if week_projections is None:
+        return True
+    entry = week_projections.get(player_id)
+    return entry is not None and entry.get("gp", 0.0) >= 0.5
+
+
 def _plays_in_week(player: Player, week_games: dict[str, str] | None) -> bool:
     """False only when the schedule positively shows a bye.
 
@@ -255,11 +278,23 @@ def _snapshot_as_of(snapshot: SnapshotData, week: int) -> SnapshotData:
 
     Mirrors the replay test fixture (see ``test_2025_season._snapshot_as_of``).
     Predicting week N means the model has only seen completed weeks 1..(N-1).
+    Projections trim to weeks <= N: Sleeper publishes week-N projections
+    before kickoff, so seeing them is exactly what a human does on Sunday
+    morning (PRD 3.1 leakage contract).
     """
 
     weekly = {w: s for w, s in snapshot.weekly_stats.items() if w < week}
     weeks = tuple(w for w in snapshot.weeks_included if w < week)
-    return snapshot.model_copy(update={"weekly_stats": weekly, "weeks_included": weeks})
+    projections = {
+        w: p for w, p in snapshot.weekly_projections.items() if w <= week
+    }
+    return snapshot.model_copy(
+        update={
+            "weekly_stats": weekly,
+            "weeks_included": weeks,
+            "weekly_projections": projections,
+        }
+    )
 
 
 def _build_history(

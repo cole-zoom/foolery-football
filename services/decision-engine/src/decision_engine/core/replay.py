@@ -30,6 +30,7 @@ from decision_engine.core.eligibility import (
     player_eligible_for_slot,
 )
 from decision_engine.core.league_fetch import UserInputError
+from decision_engine.core.lineup import assign_lineup, dp_best_assignment
 from decision_engine.core.pipeline import DecideRequest
 from decision_engine.core.scoring.common import weekly_points
 from decision_engine.types import (
@@ -168,11 +169,10 @@ def replay_week_comparison(
 
     starters = list(week_roster.starters)
     seen: Counter[str] = Counter()
-    assigned_player_ids: set[str] = set()
     # Scores are slot-independent; share them across the slot loop.
     score_cache: dict[str, ScoredCandidate] = {}
-    slot_picks: list[SlotPick] = []
     selectable_slots: list[str] = []
+    slot_rows: list[tuple[str, str, str | None]] = []  # (slot_id, slot, starter)
     using_prior_season = False
     prior_season: int | None = None
 
@@ -182,6 +182,7 @@ def replay_week_comparison(
         if slot in NON_SELECTABLE_SLOTS:
             continue
         selectable_slots.append(slot)
+        slot_rows.append((slot_id, slot, starters[i] if i < len(starters) else None))
 
         request = DecideRequest(
             user=league_context.user.user_id,
@@ -194,7 +195,6 @@ def replay_week_comparison(
             prefer_team=None,
             avoid_team=None,
             state_override=state_override,
-            exclude_player_ids=frozenset(assigned_player_ids),
         )
         result = pipeline.run(
             http=http,
@@ -232,19 +232,29 @@ def replay_week_comparison(
             for c in roster_result.candidates:
                 predicted.setdefault(c.player.player_id, c.score.projected_mean)
 
-        top = result.candidates[0] if result.candidates else None
-        if top is not None:
-            assigned_player_ids.add(top.player.player_id)
+    # Optimal assignment over predicted points (PRD 3.3): the greedy
+    # in-league-order fill burned e.g. the best QB in a SUPER_FLEX
+    # listed before QB. With pool=waivers the user's own players never
+    # entered the score cache via the waivers runs, but the roster-pool
+    # harvest above added them — restrict assignment to what the model
+    # was allowed to pick from.
+    assignable = score_cache
+    if pool == "waivers":
+        rostered = league_context.all_rostered_player_ids
+        assignable = {
+            pid: c for pid, c in score_cache.items() if pid not in rostered
+        }
+    assignment = assign_lineup(selectable_slots, assignable)
 
-        starter_pid = starters[i] if i < len(starters) else None
-        slot_picks.append(
-            SlotPick(
-                slot_id=slot_id,
-                slot=slot,
-                model_player_id=top.player.player_id if top else None,
-                human_player_id=starter_pid,
-            )
+    slot_picks = [
+        SlotPick(
+            slot_id=slot_id,
+            slot=slot,
+            model_player_id=assignment.get(slot_id),
+            human_player_id=starter_pid,
         )
+        for slot_id, slot, starter_pid in slot_rows
+    ]
 
     def actual_points_of(player_id: str | None) -> float | None:
         """None when the player is unknown to the snapshot or scoreless."""
@@ -305,11 +315,10 @@ def perfect_lineup_total(
 ) -> float | None:
     """Best actual total the roster could have produced with hindsight.
 
-    Exact assignment via DP over the bitmask of filled slots: for each
-    player (used at most once) try every eligible still-empty slot.
-    Masks are visited descending so a player can't fill two slots in the
-    same pass. Prefers a full lineup when one exists — an empty slot is
-    only "better" when a starter scored negative, which isn't a lineup a
+    Exact assignment via the shared bitmask DP (``lineup.py``), over
+    *actual* points where ``assign_lineup`` optimizes predicted ones.
+    Prefers a full lineup when one exists — an empty slot is only
+    "better" when a starter scored negative, which isn't a lineup a
     manager could field.
     """
 
@@ -317,7 +326,7 @@ def perfect_lineup_total(
     if n == 0 or n > PERFECT_LINEUP_MAX_SLOTS:
         return None
 
-    scored: list[tuple[list[int], float]] = []
+    entries: list[tuple[str, list[int], float]] = []
     for pid in roster_player_ids:
         player = snapshot.players.get(pid)
         stats = actual_table.get(pid)
@@ -328,29 +337,9 @@ def perfect_lineup_total(
         ]
         if not eligible_bits:
             continue
-        scored.append((eligible_bits, weekly_points(stats, scoring)))
+        entries.append((pid, eligible_bits, weekly_points(stats, scoring)))
 
-    if not scored:
+    result = dp_best_assignment(entries, n)
+    if result is None:
         return None
-
-    neg_inf = float("-inf")
-    dp = [neg_inf] * (1 << n)
-    dp[0] = 0.0
-    for eligible_bits, points in scored:
-        for mask in range((1 << n) - 1, -1, -1):
-            if dp[mask] == neg_inf:
-                continue
-            for b in eligible_bits:
-                bit = 1 << b
-                if mask & bit:
-                    continue
-                candidate = dp[mask] + points
-                if candidate > dp[mask | bit]:
-                    dp[mask | bit] = candidate
-
-    # Fullest reachable lineup wins; total breaks ties.
-    best_mask = max(
-        (m for m in range(1 << n) if dp[m] > neg_inf),
-        key=lambda m: (m.bit_count(), dp[m]),
-    )
-    return dp[best_mask]
+    return result[1]

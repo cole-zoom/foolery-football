@@ -21,6 +21,7 @@ def _write_snapshot(
     manifest: dict[str, object],
     players: dict[str, dict[str, object]],
     weekly: dict[int, dict[str, dict[str, float]]] | None = None,
+    projections: dict[int, dict[str, dict[str, float]]] | None = None,
     prior: dict[str, dict[str, float]] | None = None,
     schedule: list[object] | None = None,
 ) -> Path:
@@ -31,6 +32,9 @@ def _write_snapshot(
     if weekly:
         for w, table in weekly.items():
             (snap_dir / f"stats_week_{w}.json").write_text(json.dumps(table))
+    if projections:
+        for w, table in projections.items():
+            (snap_dir / f"projections_week_{w}.json").write_text(json.dumps(table))
     if prior is not None:
         (snap_dir / "stats_prior_season.json").write_text(json.dumps(prior))
     if schedule is not None:
@@ -207,6 +211,58 @@ def test_snapshot_version_lifted_from_manifest(tmp_path: Path) -> None:
     reader = FilesystemSnapshotReader(tmp_path, supported_schema_version=1)
     snap = reader.load(2025)
     assert snap.snapshot_version == "2026-09-15T00:00:42+00:00"
+
+
+def test_loads_projection_files_for_known_weeks(tmp_path: Path) -> None:
+    """Completed weeks + the upcoming week land in weekly_projections."""
+
+    _write_snapshot(
+        tmp_path,
+        season=2025,
+        manifest=_basic_manifest(season=2025, weeks=[1, 2]),
+        players={"p1": {"player_id": "p1", "full_name": "X", "fantasy_positions": ["WR"]}},
+        weekly={1: {"p1": {"rec_yd": 50.0}}, 2: {"p1": {"rec_yd": 70.0}}},
+        projections={
+            1: {"p1": {"gp": 1.0, "rec_yd": 55.0}},
+            2: {"p1": {"gp": 1.0, "rec_yd": 60.0}},
+            # upcoming_week_projection = 3 per _basic_manifest
+            3: {"p1": {"gp": 1.0, "rec_yd": 65.0}},
+        },
+    )
+    reader = FilesystemSnapshotReader(tmp_path, supported_schema_version=1)
+    snap = reader.load(2025)
+
+    assert set(snap.weekly_projections) == {1, 2, 3}
+    assert snap.weekly_projections[3]["p1"] == {"gp": 1.0, "rec_yd": 65.0}
+
+
+def test_missing_projection_files_yield_empty_mapping(tmp_path: Path) -> None:
+    """Old snapshots (no projection files) must keep loading fine."""
+
+    _write_snapshot(
+        tmp_path,
+        season=2025,
+        manifest=_basic_manifest(season=2025, weeks=[1]),
+        players={"p1": {"player_id": "p1", "full_name": "X", "fantasy_positions": ["WR"]}},
+        weekly={1: {"p1": {"rec_yd": 50.0}}},
+    )
+    reader = FilesystemSnapshotReader(tmp_path, supported_schema_version=1)
+    snap = reader.load(2025)
+    assert snap.weekly_projections == {}
+
+
+def test_partial_projection_files_load_what_exists(tmp_path: Path) -> None:
+    _write_snapshot(
+        tmp_path,
+        season=2025,
+        manifest=_basic_manifest(season=2025, weeks=[1, 2]),
+        players={"p1": {"player_id": "p1", "full_name": "X", "fantasy_positions": ["WR"]}},
+        weekly={1: {"p1": {"rec_yd": 50.0}}, 2: {"p1": {"rec_yd": 70.0}}},
+        projections={2: {"p1": {"gp": 1.0, "rec_yd": 60.0}}},
+    )
+    reader = FilesystemSnapshotReader(tmp_path, supported_schema_version=1)
+    snap = reader.load(2025)
+    assert set(snap.weekly_projections) == {2}
 
 
 def test_loads_prior_season_when_bootstrapped(tmp_path: Path) -> None:
