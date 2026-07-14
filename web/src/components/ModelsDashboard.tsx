@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query'
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
 import { Loader2 } from 'lucide-react'
-import { api, ApiError, MODELS, type Comparison, type Model, type Pool } from '@/lib/api'
+import { api, ApiError, MODELS, type Availability, type Comparison, type Model, type Pool } from '@/lib/api'
 import {
   Card,
   CardContent,
@@ -82,12 +82,14 @@ export function ModelsDashboard({
   season,
   risk,
   pool,
+  availability,
 }: {
   user: string
   leagueId: string
   season: number
   risk: number
   pool: Pool
+  availability: Availability
 }) {
   const queryClient = useQueryClient()
   const [metric, setMetric] = useState<Metric>('actual')
@@ -119,7 +121,7 @@ export function ModelsDashboard({
   // cache the worker pool fills. Key shape mirrors ComparisonView.
   const results = useQueries({
     queries: combos.map((c) => ({
-      queryKey: ['comparison', leagueId, user, season, c.week, c.model, risk, pool] as const,
+      queryKey: ['comparison', leagueId, user, season, c.week, c.model, risk, pool, availability] as const,
       queryFn: () =>
         api.comparison({
           league_id: leagueId,
@@ -129,6 +131,7 @@ export function ModelsDashboard({
           model: c.model,
           risk,
           pool,
+          availability,
         }),
       enabled: false,
       staleTime: STALE_MS,
@@ -148,7 +151,7 @@ export function ModelsDashboard({
         const c = queue.shift()
         if (!c) return
         await queryClient.prefetchQuery({
-          queryKey: ['comparison', leagueId, user, season, c.week, c.model, risk, pool],
+          queryKey: ['comparison', leagueId, user, season, c.week, c.model, risk, pool, availability],
           queryFn: () =>
             api.comparison({
               league_id: leagueId,
@@ -158,6 +161,7 @@ export function ModelsDashboard({
               model: c.model,
               risk,
               pool,
+              availability,
             }),
           staleTime: STALE_MS,
           retry: (count, err) =>
@@ -170,7 +174,7 @@ export function ModelsDashboard({
     return () => {
       cancelled = true
     }
-  }, [queryClient, leagueId, user, season, risk, pool, maxWeek])
+  }, [queryClient, leagueId, user, season, risk, pool, availability, maxWeek])
 
   const settled = results.filter((r) => r.isSuccess || r.isError).length
   const loading = combos.length === 0 || settled < combos.length

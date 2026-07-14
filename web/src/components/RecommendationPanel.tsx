@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, X } from 'lucide-react'
-import { api, type Candidate, type Model, type Pool } from '@/lib/api'
+import { api, type Candidate, type Model, type Pool, type Availability } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { slotBase, slotLabel } from '@/lib/positions'
 import { FieldSelect } from './FieldSelect'
@@ -21,6 +21,7 @@ export function RecommendationPanel({
   risk,
   pool,
   model,
+  availability,
   onPoolChange,
   pinnedPlayerId,
   onPin,
@@ -37,6 +38,7 @@ export function RecommendationPanel({
   risk: number
   pool: Pool
   model: Model
+  availability: Availability
   onPoolChange: (p: Pool) => void
   pinnedPlayerId: string | null
   onPin: (c: Candidate) => void
@@ -47,7 +49,7 @@ export function RecommendationPanel({
 
   const q = useQuery({
     enabled: open && !!slotBaseStr && week !== null,
-    queryKey: ['decide', user, leagueId, season, week, slotBaseStr, risk, pool, model],
+    queryKey: ['decide', user, leagueId, season, week, slotBaseStr, risk, pool, model, availability],
     queryFn: () =>
       api.decide({
         user,
@@ -56,6 +58,7 @@ export function RecommendationPanel({
         risk,
         pool,
         model,
+        availability,
         season,
         week: week ?? undefined,
         limit: 12,

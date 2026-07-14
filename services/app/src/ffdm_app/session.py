@@ -23,7 +23,7 @@ from decision_engine.config.settings import (
 from decision_engine.config.settings import SUPPORTED_SCHEMA_VERSION
 from decision_engine.core import pipeline as decide_pipeline
 from decision_engine.core.pipeline import DecideRequest, DecideResult
-from decision_engine.types import NflState, Pool
+from decision_engine.types import AvailabilityMode, NflState, Pool
 from stats_loader.clients.http import SleeperHttpClient as LoaderHttpClient
 from stats_loader.providers import sleeper as loader_sleeper
 
@@ -166,6 +166,7 @@ def decide(
         prefer_team=request.prefer_team,
         avoid_team=request.avoid_team,
         state_override=NflState(season=request.season, week=request.week),
+        availability=cast(AvailabilityMode, request.availability),
     )
 
     with DecideHttpClient(base_url) as http:

@@ -81,6 +81,16 @@ export const MODELS = [
 ] as const
 export type Model = (typeof MODELS)[number]['value']
 
+/** Availability-gate sources (decision-engine AvailabilityMode). Who
+ * counts as startable, before any model scores anyone. */
+export const AVAILABILITY_MODES = [
+  { value: 'sleeper', label: 'Sleeper (default)' },
+  { value: 'news', label: 'Injury report (free)' },
+  { value: 'heuristic', label: 'Played last game' },
+  { value: 'none', label: 'Off' },
+] as const
+export type Availability = (typeof AVAILABILITY_MODES)[number]['value']
+
 export const ScoreSchema = z.object({
   projected_mean: z.number(),
   projected_variance: z.number(),
@@ -260,6 +270,7 @@ export const api = {
     pool?: Pool
     limit?: number
     model?: Model
+    availability?: Availability
     season?: number
     week?: number
     prefer_team?: string
@@ -271,6 +282,7 @@ export const api = {
     risk?: number
     pool?: Pool
     model?: Model
+    availability?: Availability
     season?: number
     week?: number
     prefer_team?: string
@@ -285,6 +297,7 @@ export const api = {
     risk?: number
     pool?: Pool
     model?: Model
+    availability?: Availability
     season?: number
     week?: number
   }) => {

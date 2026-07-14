@@ -67,7 +67,11 @@ projections there is no honest signal; documented limitation.
 ## Availability heuristic (run B)
 
 New `DecideRequest.availability` knob: `"sleeper"` (default, PRD 3.1
-gate) | `"heuristic"` | `"news"` | `"none"`. Heuristic: startable iff
+gate) | `"heuristic"` | `"news"` | `"none"`. Exposed end-to-end: an
+`availability` query param on `/decide`, `/decisions`, `/comparison`
+and an "INJURY GATE" select in the web header (default Sleeper), so
+the availability ladder is demoable live, per model. Heuristic:
+startable iff
 the player recorded a stat row in his team's most recent completed
 game (bye weeks skipped via the schedule); no completed games yet →
 startable. Model-agnostic, same quarantine-over-drop conventions as

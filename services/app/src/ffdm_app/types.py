@@ -32,6 +32,8 @@ class AppRequest:
     pool: str = "roster"
     limit: int = 10
     model: str = "naive"
+    # Availability-gate source (decision_engine.types.AvailabilityMode).
+    availability: str = "sleeper"
     prefer_team: str | None = None
     avoid_team: str | None = None
     snapshot_root: Path | None = None
