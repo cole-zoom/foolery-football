@@ -209,8 +209,11 @@ def assemble_snapshot(
             )
 
     schedule: dict[int, dict[str, str]] = {}
+    home_teams: dict[int, frozenset[str]] = {}
     if has_object(SCHEDULE_NAME):
-        schedule = _schedule_from_raw(load_json(SCHEDULE_NAME), label=SCHEDULE_NAME)
+        schedule, home_teams = _schedule_from_raw(
+            load_json(SCHEDULE_NAME), label=SCHEDULE_NAME
+        )
 
     version = manifest.get("snapshot_finished_at")
 
@@ -224,6 +227,7 @@ def assemble_snapshot(
         weekly_stats=weekly_stats,
         prior_season_stats=prior_season_stats,
         schedule=schedule,
+        home_teams=home_teams,
         snapshot_version=version if isinstance(version, str) else None,
     )
 
@@ -290,12 +294,16 @@ def _as_object(payload: object, name: str, location_label: str) -> dict[str, obj
     return payload
 
 
-def _schedule_from_raw(payload: object, *, label: str) -> dict[int, dict[str, str]]:
-    """``schedule.json`` (list of games) -> week -> team -> opponent.
+def _schedule_from_raw(
+    payload: object, *, label: str
+) -> tuple[dict[int, dict[str, str]], dict[int, frozenset[str]]]:
+    """``schedule.json`` (list of games) -> opponent map + home teams.
 
-    Both directions of every game are recorded so a single dict lookup
-    answers "who does <team> face in week <W>". Malformed games are
-    logged and skipped (quarantine over drop).
+    The opponent map records both directions of every game so a single
+    dict lookup answers "who does <team> face in week <W>"; the home
+    set preserves which side hosts (the opponent map is symmetric and
+    loses that). Malformed games are logged and skipped (quarantine
+    over drop).
     """
 
     if not isinstance(payload, list):
@@ -304,6 +312,7 @@ def _schedule_from_raw(payload: object, *, label: str) -> dict[int, dict[str, st
         )
 
     out: dict[int, dict[str, str]] = {}
+    home_sets: dict[int, set[str]] = {}
     for i, game in enumerate(payload):
         if not isinstance(game, dict):
             log.warning("%s: game %d not an object; skipping", label, i)
@@ -317,7 +326,8 @@ def _schedule_from_raw(payload: object, *, label: str) -> dict[int, dict[str, st
         week_map = out.setdefault(week, {})
         week_map[home] = away
         week_map[away] = home
-    return out
+        home_sets.setdefault(week, set()).add(home)
+    return out, {w: frozenset(s) for w, s in home_sets.items()}
 
 
 def _players_from_raw(raw: dict[str, object]) -> dict[str, Player]:

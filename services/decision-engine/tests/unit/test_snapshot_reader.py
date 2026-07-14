@@ -177,6 +177,9 @@ def test_schedule_parsed_into_week_team_opponent(tmp_path: Path) -> None:
     # Both directions of each game are addressable.
     assert snap.schedule[1] == {"KC": "BUF", "BUF": "KC"}
     assert snap.schedule[2] == {"BUF": "NYJ", "NYJ": "BUF"}
+    # Home sides survive (the symmetric opponent map loses them).
+    assert snap.home_teams[1] == frozenset({"KC"})
+    assert snap.home_teams[2] == frozenset({"BUF"})
 
 
 def test_schedule_wrong_top_level_type_raises(tmp_path: Path) -> None:

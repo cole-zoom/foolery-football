@@ -16,7 +16,7 @@ projected at >= 8 points.
 
 Usage:
     uv run --project services/decision-engine python scripts/backtest-models.py \
-        [--season 2025] [--weeks 4-18] [--models naive,context]
+        [--season 2025] [--weeks 4-18] [--models naive,context,gbt]
 """
 
 from __future__ import annotations
@@ -122,7 +122,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--season", type=int, default=2025)
     ap.add_argument("--weeks", default="4-18", help="inclusive range, e.g. 4-18")
-    ap.add_argument("--models", default="naive,context")
+    ap.add_argument("--models", default="naive,context,gbt")
     ap.add_argument("--root", default="data/seasons")
     args = ap.parse_args()
 
