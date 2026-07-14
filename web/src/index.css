@@ -39,6 +39,28 @@
   --color-good:    #10b981;
   --color-warn:    #f59e0b;
 
+  /* === shadcn/ui semantic tokens, bridged onto the ink scale ===
+     Components from components/ui/ consume these; both modes work
+     because the ink vars they point at flip under html:not(.dark). */
+  --color-background: var(--color-ink-base);
+  --color-foreground: var(--color-ink-12);
+  --color-card: var(--color-ink-2);
+  --color-card-foreground: var(--color-ink-12);
+  --color-popover: var(--color-ink-2);
+  --color-popover-foreground: var(--color-ink-12);
+  --color-primary: var(--color-ink-12);
+  --color-primary-foreground: var(--color-ink-base);
+  --color-secondary: var(--color-ink-3);
+  --color-secondary-foreground: var(--color-ink-12);
+  --color-muted: var(--color-ink-3);
+  --color-muted-foreground: var(--color-ink-8);
+  --color-accent: var(--color-ink-4);
+  --color-accent-foreground: var(--color-ink-12);
+  --color-destructive: var(--color-signal);
+  --color-border: color-mix(in oklch, var(--color-ink-6) 80%, transparent);
+  --color-input: var(--color-ink-5);
+  --color-ring: var(--color-signal);
+
   --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
 
   --radius-xs: 2px;
