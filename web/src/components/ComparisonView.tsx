@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, Swords, TrendingUp } from 'lucide-react'
-import { api, ApiError, type Comparison, type ComparisonPlayer, type Model, type Pool } from '@/lib/api'
+import { api, ApiError, type Availability, type Comparison, type ComparisonPlayer, type Model, type Pool } from '@/lib/api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { PositionChip } from '@/components/PositionChip'
 import { cn } from '@/lib/cn'
@@ -36,6 +36,7 @@ export function ComparisonView({
   model,
   risk,
   pool,
+  availability,
   onViewPlayer,
 }: {
   user: string
@@ -45,11 +46,12 @@ export function ComparisonView({
   model: Model
   risk: number
   pool: Pool
+  availability: Availability
   onViewPlayer: (playerId: string) => void
 }) {
   const q = useQuery({
     enabled: week !== null,
-    queryKey: ['comparison', leagueId, user, season, week, model, risk, pool],
+    queryKey: ['comparison', leagueId, user, season, week, model, risk, pool, availability],
     queryFn: () =>
       api.comparison({
         league_id: leagueId,
@@ -59,6 +61,7 @@ export function ComparisonView({
         model,
         risk,
         pool,
+        availability,
       }),
     placeholderData: (prev) => prev,
     retry: (count, err) => !(err instanceof ApiError && err.status === 400) && count < 2,

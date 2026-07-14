@@ -28,6 +28,7 @@ from api.deps import (
 )
 from api.hydrate import player_to_wire
 from api.schemas import (
+    Availability,
     CandidateOut,
     DecisionsOut,
     Pool,
@@ -56,6 +57,7 @@ def get_decisions(
     risk: float = Query(default=0.5, ge=0.0, le=1.0),
     pool: Pool = Query(default="roster"),
     model: str = Query(default="blend"),
+    availability: Availability = Query(default="sleeper"),
     season: int | None = Query(default=None),
     week: int | None = Query(default=None),
     prefer_team: str | None = Query(default=None),
@@ -119,6 +121,7 @@ def get_decisions(
             prefer_team=prefer,
             avoid_team=avoid,
             state_override=state_override,
+            availability=availability,
         )
 
         result = decide_pipeline.run(

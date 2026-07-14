@@ -21,7 +21,7 @@ from api.deps import (
     SnapshotReaderDep,
 )
 from api.hydrate import player_to_wire
-from api.schemas import CandidateOut, DecideOut, Pool, ScoreOut
+from api.schemas import Availability, CandidateOut, DecideOut, Pool, ScoreOut
 
 router = APIRouter(tags=["decide"])
 
@@ -39,6 +39,7 @@ def decide(
     pool: Pool = Query(default="roster"),
     limit: int = Query(default=20, ge=1, le=200),
     model: str = Query(default="blend"),
+    availability: Availability = Query(default="sleeper"),
     season: int | None = Query(default=None),
     week: int | None = Query(default=None),
     prefer_team: str | None = Query(default=None),
@@ -64,6 +65,7 @@ def decide(
         pool=pool,
         limit=limit,
         model=model,
+        availability=availability,
         prefer_team=prefer_team.upper() if prefer_team else None,
         avoid_team=avoid_team.upper() if avoid_team else None,
         snapshot_root=settings.snapshot_root,

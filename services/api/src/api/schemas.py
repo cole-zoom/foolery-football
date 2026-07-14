@@ -13,6 +13,10 @@ from pydantic import BaseModel, Field
 
 Confidence = Literal["low", "medium", "high"]
 Pool = Literal["roster", "waivers", "both"]
+# Availability-gate source (decision_engine.types.AvailabilityMode):
+# who counts as startable. "sleeper" is the default everywhere; the
+# other modes power the UI's injury-gate knob.
+Availability = Literal["sleeper", "heuristic", "news", "none"]
 
 
 class StateOut(BaseModel):

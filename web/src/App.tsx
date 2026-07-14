@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChartLine, Database, LayoutDashboard, Loader2, RotateCcw, Swords, TrendingUp } from 'lucide-react'
-import { api, MODELS, type Candidate, type Model, type Pool, type SlotDecision } from '@/lib/api'
+import { api, AVAILABILITY_MODES, MODELS, type Availability, type Candidate, type Model, type Pool, type SlotDecision } from '@/lib/api'
 import { ComparisonView } from '@/components/ComparisonView'
 import { ModelsDashboard } from '@/components/ModelsDashboard'
 import { EntryForm } from '@/components/EntryForm'
@@ -35,6 +35,7 @@ export default function App() {
   const [risk, setRisk] = useState(0.5)
   const [pool, setPool] = useState<Pool>('roster')
   const [model, setModel] = useState<Model>('blend')
+  const [availability, setAvailability] = useState<Availability>('sleeper')
   const [week, setWeek] = useState<number | null>(null)
   const [prefer, setPrefer] = useState<string | null>(null)
   const [avoid, setAvoid] = useState<string | null>(null)
@@ -68,6 +69,8 @@ export default function App() {
       setPool={setPool}
       model={model}
       setModel={setModel}
+      availability={availability}
+      setAvailability={setAvailability}
       week={week}
       setWeek={setWeek}
       prefer={prefer}
@@ -95,6 +98,8 @@ function SessionView({
   setPool,
   model,
   setModel,
+  availability,
+  setAvailability,
   week,
   setWeek,
   prefer,
@@ -118,6 +123,8 @@ function SessionView({
   setPool: (p: Pool) => void
   model: Model
   setModel: (m: Model) => void
+  availability: Availability
+  setAvailability: (a: Availability) => void
   week: number | null
   setWeek: (w: number | null) => void
   prefer: string | null
@@ -187,6 +194,7 @@ function SessionView({
       debouncedRisk,
       pool,
       model,
+      availability,
       prefer,
       avoid,
     ],
@@ -197,6 +205,7 @@ function SessionView({
         risk: debouncedRisk,
         pool,
         model,
+        availability,
         season: session.season,
         week: week ?? undefined,
         prefer_team: prefer ?? undefined,
@@ -251,6 +260,7 @@ function SessionView({
             debouncedRisk,
             pool,
             model,
+            availability,
             prefer,
             avoid,
           ],
@@ -261,6 +271,7 @@ function SessionView({
               risk: debouncedRisk,
               pool,
               model,
+              availability,
               season: session.season,
               week: w,
               prefer_team: prefer ?? undefined,
@@ -287,6 +298,7 @@ function SessionView({
     debouncedRisk,
     pool,
     model,
+    availability,
     prefer,
     avoid,
     session.leagueId,
@@ -443,6 +455,17 @@ function SessionView({
                 triggerClassName="min-w-[170px]"
               />
             )}
+            <FieldSelect
+              label="INJURY GATE"
+              value={availability}
+              onChange={(v) => {
+                setAvailability(v as Availability)
+                setPins({})
+              }}
+              options={AVAILABILITY_MODES.map((m) => ({ value: m.value, label: m.label }))}
+              size="sm"
+              triggerClassName="min-w-[150px]"
+            />
             <Divider />
             <RiskKnob value={risk} onChange={setRisk} pending={riskPending} />
             <Divider />
@@ -479,6 +502,7 @@ function SessionView({
           season={session.season}
           risk={debouncedRisk}
           pool={pool}
+          availability={availability}
         />
       ) : view === 'comparison' ? (
         <ComparisonView
@@ -489,6 +513,7 @@ function SessionView({
           model={model}
           risk={debouncedRisk}
           pool={pool}
+          availability={availability}
           onViewPlayer={setOpenPlayerId}
         />
       ) : (
@@ -662,6 +687,7 @@ function SessionView({
         risk={debouncedRisk}
         pool={pool}
         model={model}
+        availability={availability}
         onPoolChange={setPool}
         pinnedPlayerId={activeSlotId ? (pins[activeSlotId]?.player.player_id ?? null) : null}
         onPin={(c) => {

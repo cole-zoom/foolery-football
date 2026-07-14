@@ -34,6 +34,7 @@ from api.routers.decisions import (
     _default_week,
 )
 from api.schemas import (
+    Availability,
     ComparisonAccuracyOut,
     ComparisonOut,
     ComparisonPlayerOut,
@@ -55,6 +56,7 @@ def get_comparison(
     risk: float = Query(default=0.5, ge=0.0, le=1.0),
     pool: Pool = Query(default="roster"),
     model: str = Query(default="blend"),
+    availability: Availability = Query(default="sleeper"),
     season: int | None = Query(default=None),
     week: int | None = Query(default=None),
 ) -> ComparisonOut:
@@ -104,6 +106,7 @@ def get_comparison(
         risk=risk,
         pool=pool,
         candidate_limit=CANDIDATE_SEARCH_LIMIT,
+        availability=availability,
     )
 
     base = settings.headshot_base_url
