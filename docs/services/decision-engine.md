@@ -24,7 +24,10 @@ eligible players, and print them ranked.
 4. Filter the candidate pool to `--slot`-eligible players in
    `--pool`, dropping players whose team has no game in the target
    week (bye, per the snapshot's season schedule; weeks the schedule
-   doesn't cover skip the filter).
+   doesn't cover skip the filter) and players Sleeper's week-W
+   projection table doesn't expect to play (the availability gate,
+   [PRD 3.1](../product-specs/milestone-3/3.1-projections-and-availability-gate.md);
+   weeks with no projection table skip the filter).
 5. For each candidate, compute:
    - `projection_mean` — see [scoring model PRD](../product-specs/milestone-2/2.2-scoring-model.md).
    - `projection_variance` — stddev across prior weeks.
@@ -61,7 +64,14 @@ def score_player(
 The naive v1 implementation lives in `core.scoring.naive`. Swapping
 in a smarter model means adding a sibling module and selecting
 between them via a config flag — no edits to `core/pipeline.py` or
-the CLI.
+the CLI. Registered today: `naive`, `context` (ridge regression),
+`gbt` (boosted trees), `blend` (Sleeper's week-W projection as the
+mean, context's spread — [PRD 3.2](../product-specs/milestone-3/3.2-blend-model.md)).
+
+Multi-slot lineups (the `/decisions` router and week replays) assign
+players to slots optimally over predicted points via the bitmask DP in
+`core/lineup.py` ([PRD 3.3](../product-specs/milestone-3/3.3-lineup-assembly.md))
+— the greedy in-league-order fill mishandled superflex leagues.
 
 ## Running locally
 
