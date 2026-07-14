@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from decision_engine.core import pipeline
@@ -421,6 +423,93 @@ def test_availability_gate_open_when_week_has_no_projections() -> None:
     )
     pids = {c.player.player_id for c in result.candidates}
     assert pids == {"p1", "p2"}
+
+
+def test_heuristic_availability_benches_player_missing_from_last_game() -> None:
+    """availability=heuristic: p1 has no stat row in week 2 (the most
+    recent completed game for DET) -> not startable; p2 played -> stays.
+    The sleeper projection table is ignored entirely in this mode."""
+
+    snap = _snapshot_with_history()
+    weekly = {w: dict(t) for w, t in snap.weekly_stats.items()}
+    del weekly[2]["p1"]
+    snap = snap.model_copy(
+        update={
+            "weekly_stats": weekly,
+            # Projections say p1 plays — heuristic mode must not care.
+            "weekly_projections": {3: {"p1": {"gp": 1.0}, "p2": {"gp": 1.0}}},
+        }
+    )
+    http = FakeHttp(league_routes(user_roster_players=("p1", "p2")))
+    reader = FakeSnapshotReader(snap)
+
+    result = pipeline.run(
+        http=http,
+        snapshot_reader=reader,
+        request=_make_request(
+            slot="FLEX", pool="roster", state_override=NflState(season=2026, week=3)
+        ),
+    )
+    # Default (sleeper) mode keeps p1: the projection says he plays.
+    assert {c.player.player_id for c in result.candidates} == {"p1", "p2"}
+
+    heuristic = pipeline.run(
+        http=FakeHttp(league_routes(user_roster_players=("p1", "p2"))),
+        snapshot_reader=reader,
+        request=dataclasses.replace(
+            _make_request(slot="FLEX", pool="roster"), availability="heuristic"
+        ),
+    )
+    assert {c.player.player_id for c in heuristic.candidates} == {"p2"}
+
+
+def test_heuristic_availability_skips_bye_weeks_when_looking_back() -> None:
+    """DET was on bye in week 2; p1 played week 1 (his team's most recent
+    game) -> startable even though he has no week-2 row."""
+
+    snap = _snapshot_with_history()
+    weekly = {w: dict(t) for w, t in snap.weekly_stats.items()}
+    del weekly[2]["p1"]
+    snap = snap.model_copy(
+        update={
+            "weekly_stats": weekly,
+            "schedule": {
+                1: {"DET": "GB", "GB": "DET", "CHI": "MIN", "MIN": "CHI"},
+                2: {"CHI": "GB", "GB": "CHI"},  # DET bye
+                3: {"DET": "CHI", "CHI": "DET"},
+            },
+        }
+    )
+    http = FakeHttp(league_routes(user_roster_players=("p1", "p2")))
+    reader = FakeSnapshotReader(snap)
+
+    result = pipeline.run(
+        http=http,
+        snapshot_reader=reader,
+        request=dataclasses.replace(
+            _make_request(slot="FLEX", pool="roster"), availability="heuristic"
+        ),
+    )
+    assert {c.player.player_id for c in result.candidates} == {"p1", "p2"}
+
+
+def test_heuristic_availability_open_when_no_history() -> None:
+    """Week 1 (nothing trimmed in): everyone is startable."""
+
+    snap = _snapshot_with_history()
+    http = FakeHttp(league_routes(user_roster_players=("p1", "p2")))
+    reader = FakeSnapshotReader(snap)
+
+    result = pipeline.run(
+        http=http,
+        snapshot_reader=reader,
+        request=dataclasses.replace(
+            _make_request(slot="FLEX", pool="roster"),
+            availability="heuristic",
+            state_override=NflState(season=2026, week=1),
+        ),
+    )
+    assert {c.player.player_id for c in result.candidates} == {"p1", "p2"}
 
 
 def test_state_override_skips_state_call() -> None:

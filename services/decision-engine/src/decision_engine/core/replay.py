@@ -34,6 +34,7 @@ from decision_engine.core.lineup import assign_lineup, dp_best_assignment
 from decision_engine.core.pipeline import DecideRequest
 from decision_engine.core.scoring.common import weekly_points
 from decision_engine.types import (
+    AvailabilityMode,
     LeagueContext,
     Matchup,
     NflState,
@@ -100,6 +101,7 @@ def replay_week_comparison(
     risk: float = 0.5,
     pool: Pool = "roster",
     candidate_limit: int = DEFAULT_CANDIDATE_LIMIT,
+    availability: AvailabilityMode = "sleeper",
 ) -> WeekComparison:
     """Replay week ``week`` for the context's roster under ``model``.
 
@@ -195,6 +197,7 @@ def replay_week_comparison(
             prefer_team=None,
             avoid_team=None,
             state_override=state_override,
+            availability=availability,
         )
         result = pipeline.run(
             http=http,

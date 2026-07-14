@@ -13,6 +13,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 Confidence = Literal["low", "medium", "high"]
 Pool = Literal["roster", "waivers", "both"]
+# How the pipeline decides a player is available to start in week W:
+# "sleeper" — gate on Sleeper's pre-kickoff projection entry (PRD 3.1);
+# "heuristic" — gate on our own archive: played in his team's most
+# recent completed game (milestone 4's fully sleeper-free mode);
+# "none" — no availability filter (bye filter still applies).
+AvailabilityMode = Literal["sleeper", "heuristic", "none"]
 
 # Stat code -> point weight (e.g. ``{"pass_yd": 0.04, "rec": 1.0}``). The
 # scoring model multiplies these against the same codes in the stats

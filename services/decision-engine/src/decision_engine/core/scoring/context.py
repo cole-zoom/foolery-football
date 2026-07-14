@@ -319,19 +319,25 @@ def _fit_all_positions(
     return fits
 
 
-def _ridge_fit(rows: list[tuple[tuple[float, ...], float]]) -> _PositionFit:
+def _ridge_fit(
+    rows: list[tuple[tuple[float, ...], float]],
+    *,
+    ridge_lambda: float = RIDGE_LAMBDA,
+) -> _PositionFit:
     """Closed-form ridge on standardised features, unpenalised intercept.
 
-    Small enough (5x5 normal equations) that pure python beats pulling
-    numpy into the image.
+    Small enough (a handful of normal equations) that pure python beats
+    pulling numpy into the image. Feature count is inferred from the
+    rows so wider models (scratch) can reuse this verbatim.
     """
 
     n = len(rows)
-    means = [0.0] * N_FEATURES
+    n_features = len(rows[0][0])
+    means = [0.0] * n_features
     for feats, _y in rows:
         for i, f in enumerate(feats):
             means[i] += f / n
-    stds = [0.0] * N_FEATURES
+    stds = [0.0] * n_features
     for feats, _y in rows:
         for i, f in enumerate(feats):
             stds[i] += (f - means[i]) ** 2 / n
@@ -339,7 +345,7 @@ def _ridge_fit(rows: list[tuple[tuple[float, ...], float]]) -> _PositionFit:
     # ridge penalty zeroes their coefficient instead of dividing by 0.
     stds = [s**0.5 if s > 1e-12 else 1.0 for s in stds]
 
-    dim = N_FEATURES + 1  # intercept + standardised features
+    dim = n_features + 1  # intercept + standardised features
     xtx = [[0.0] * dim for _ in range(dim)]
     xty = [0.0] * dim
     for feats, y in rows:
@@ -349,7 +355,7 @@ def _ridge_fit(rows: list[tuple[tuple[float, ...], float]]) -> _PositionFit:
             for b in range(dim):
                 xtx[a][b] += z[a] * z[b]
     for a in range(1, dim):  # leave the intercept unpenalised
-        xtx[a][a] += RIDGE_LAMBDA
+        xtx[a][a] += ridge_lambda
 
     beta = _solve(xtx, xty)
     return _PositionFit(

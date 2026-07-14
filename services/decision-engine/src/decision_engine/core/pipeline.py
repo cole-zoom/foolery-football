@@ -22,6 +22,7 @@ from decision_engine.core.league_fetch import (
 )
 from decision_engine.core.scoring import build_score_fn
 from decision_engine.types import (
+    AvailabilityMode,
     LeagueContext,
     NflState,
     Player,
@@ -59,6 +60,10 @@ class DecideRequest:
     avoid_team: str | None
     state_override: NflState | None
     exclude_player_ids: frozenset[str] | None = None
+    # Availability gate source — see types.AvailabilityMode. "sleeper"
+    # is the PRD 3.1 default; "heuristic" is milestone 4's fully
+    # sleeper-free replay mode.
+    availability: AvailabilityMode = "sleeper"
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,10 +160,22 @@ def run(
     # team has no week-``state.week`` game can only score zero. Applies
     # to live recommendations and replays alike.
     week_games = snapshot.schedule.get(state.week) or None
-    # Availability gate: a player with no week-W projection entry is not
-    # startable (injured/inactive/demoted per Sleeper's pre-kickoff
-    # view). Model-agnostic — applies to every pool and every model.
-    week_projections = snapshot.weekly_projections.get(state.week)
+    # Availability gate: filter out players not expected to take the
+    # field (injured/inactive/demoted). Model-agnostic — applies to
+    # every pool and every model. Source per request.availability:
+    # Sleeper's pre-kickoff projection entry (default), our own
+    # played-recently heuristic, or nothing.
+    week_projections = (
+        snapshot.weekly_projections.get(state.week)
+        if request.availability == "sleeper"
+        else None
+    )
+
+    def available(pid: str) -> bool:
+        if request.availability == "heuristic":
+            return _played_recently(snapshot.players[pid], snapshot)
+        return _projected_to_play(pid, week_projections)
+
     eligible: list[Player] = [
         snapshot.players[pid]
         for pid in pool_player_ids
@@ -166,7 +183,7 @@ def run(
         and pid in snapshot.players
         and player_eligible_for_slot(snapshot.players[pid], request.slot)
         and _plays_in_week(snapshot.players[pid], week_games)
-        and _projected_to_play(pid, week_projections)
+        and available(pid)
     ]
     log.info(
         "Pool=%s slot=%s -> %d eligible candidates (of %d pooled)",
@@ -256,6 +273,32 @@ def _projected_to_play(
         return True
     entry = week_projections.get(player_id)
     return entry is not None and entry.get("gp", 0.0) >= 0.5
+
+
+def _played_recently(player: Player, snapshot: SnapshotData) -> bool:
+    """Sleeper-free availability: did he play his team's last game?
+
+    Walks the trimmed snapshot's completed weeks (already < the target
+    week) newest-first, skipping weeks the schedule shows as his
+    team's bye, and answers whether the player has a stat row in the
+    most recent week his team actually played. No completed weeks yet
+    (week 1), or a team-less player — startable, same
+    quarantine-over-drop convention as the other filters.
+
+    Cruder than the Sleeper gate by construction: a player who got hurt
+    *during* last week's game still passes, and one who sat a single
+    game returning this week gets benched a week late. That difference
+    is exactly what milestone 4's run B measures.
+    """
+
+    if player.team is None or not snapshot.weekly_stats:
+        return True
+    for w in sorted(snapshot.weekly_stats, reverse=True):
+        games = snapshot.schedule.get(w)
+        if games is not None and player.team not in games:
+            continue  # team bye — look one week further back
+        return player.player_id in snapshot.weekly_stats[w]
+    return True
 
 
 def _plays_in_week(player: Player, week_games: dict[str, str] | None) -> bool:
