@@ -44,6 +44,7 @@ MANIFEST_NAME: Final[str] = "manifest.json"
 PLAYERS_NAME: Final[str] = "players.json"
 PRIOR_SEASON_NAME: Final[str] = "stats_prior_season.json"
 SCHEDULE_NAME: Final[str] = "schedule.json"
+INJURIES_NAME: Final[str] = "injuries.json"
 
 
 class SnapshotReader(Protocol):
@@ -229,6 +230,13 @@ def assemble_snapshot(
             load_json(SCHEDULE_NAME), label=SCHEDULE_NAME
         )
 
+    weekly_injuries: dict[int, dict[str, str]] = {}
+    if has_object(INJURIES_NAME):
+        weekly_injuries = _injuries_from_raw(
+            _as_object(load_json(INJURIES_NAME), INJURIES_NAME, location_label),
+            label=INJURIES_NAME,
+        )
+
     version = manifest.get("snapshot_finished_at")
 
     return SnapshotData(
@@ -243,6 +251,7 @@ def assemble_snapshot(
         prior_season_stats=prior_season_stats,
         schedule=schedule,
         home_teams=home_teams,
+        weekly_injuries=weekly_injuries,
         snapshot_version=version if isinstance(version, str) else None,
     )
 
@@ -343,6 +352,39 @@ def _schedule_from_raw(
         week_map[away] = home
         home_sets.setdefault(week, set()).add(home)
     return out, {w: frozenset(s) for w, s in home_sets.items()}
+
+
+def _injuries_from_raw(
+    raw: dict[str, object], *, label: str
+) -> dict[int, dict[str, str]]:
+    """``injuries.json`` -> week -> player_id -> report_status.
+
+    Shape written by ``scripts/fetch-injuries.py``:
+    ``{"<week>": {"<pid>": {"report_status": "Out", ...}}}``. Only the
+    game-status string is lifted; malformed weeks/entries are logged
+    and skipped (quarantine over drop).
+    """
+
+    out: dict[int, dict[str, str]] = {}
+    for week_key, table in raw.items():
+        try:
+            week = int(week_key)
+        except (TypeError, ValueError):
+            log.warning("%s: week key %r not an int; skipping", label, week_key)
+            continue
+        if not isinstance(table, dict):
+            log.warning("%s: week %s value not an object; skipping", label, week_key)
+            continue
+        week_out: dict[str, str] = {}
+        for pid, entry in table.items():
+            if not isinstance(entry, dict):
+                log.warning("%s: wk%s player %s not an object; skipping", label, week_key, pid)
+                continue
+            status = entry.get("report_status")
+            if isinstance(status, str) and status:
+                week_out[str(pid)] = status
+        out[week] = week_out
+    return out
 
 
 def _players_from_raw(raw: dict[str, object]) -> dict[str, Player]:

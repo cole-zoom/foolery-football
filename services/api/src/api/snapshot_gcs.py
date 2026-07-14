@@ -27,6 +27,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 
 from decision_engine.clients.snapshot_reader import (
+    INJURIES_NAME,
     MANIFEST_NAME,
     PLAYERS_NAME,
     PRIOR_SEASON_NAME,
@@ -94,7 +95,7 @@ class GcsSnapshotReader:
                 blobs[name] = None
 
         weeks, upcoming = _peek_weeks(manifest_bytes)
-        names = [PLAYERS_NAME, PRIOR_SEASON_NAME, SCHEDULE_NAME]
+        names = [PLAYERS_NAME, PRIOR_SEASON_NAME, SCHEDULE_NAME, INJURIES_NAME]
         names += [f"stats_week_{w}.json" for w in weeks]
         # Projections are optional per week (older snapshots lack them),
         # but has_object() answers from the prefetched set — anything not

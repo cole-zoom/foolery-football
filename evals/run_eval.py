@@ -131,6 +131,13 @@ def main() -> None:
     parser.add_argument("--force", action="store_true", help="recompute existing cells")
     parser.add_argument("--risk", type=float, default=0.5)
     parser.add_argument("--pool", default="roster", choices=("roster", "waivers", "both"))
+    parser.add_argument(
+        "--availability",
+        default="sleeper",
+        choices=("sleeper", "heuristic", "news", "none"),
+        help="availability gate source (milestone 4 run B uses 'heuristic', "
+        "run C 'news'; pair non-default modes with a separate --results-dir)",
+    )
     parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE_DIR)
     parser.add_argument("--results-dir", type=Path, default=DEFAULT_RESULTS_DIR)
     parser.add_argument(
@@ -221,6 +228,7 @@ def main() -> None:
                         model=model,
                         risk=args.risk,
                         pool=args.pool,
+                        availability=args.availability,
                     )
                 except Exception as exc:  # quarantine, keep the run alive
                     week_rec["models"][model] = {"error": f"{type(exc).__name__}: {exc}"}

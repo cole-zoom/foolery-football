@@ -13,6 +13,7 @@
 
 ## References
 - [Sleeper API endpoint inventory](references/sleeper-api.md) — including endpoints the official docs omit.
+- [External data sources](references/external-data.md) — nflverse injury reports + player-ID crosswalk (non-Sleeper inputs).
 - [Fantasy football glossary](references/fantasy-glossary.md) — what every domain term means in this codebase.
 - [2026 NFL week 1 schedule](references/nfl-2026-week-1.md) — test fixture.
 
@@ -30,3 +31,4 @@
   - [3.2 — Blend model](product-specs/milestone-3/3.2-blend-model.md)
   - [3.3 — Lineup assembly](product-specs/milestone-3/3.3-lineup-assembly.md)
   - [3.4 — Eval attribution + ship gate](product-specs/milestone-3/3.4-eval-attribution-and-ship-gate.md)
+- [Milestone 4 — Scratch model: a sleeperless blend](product-specs/milestone-4-scratch-model.md)

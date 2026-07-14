@@ -74,6 +74,7 @@ export type Confidence = z.infer<typeof ConfidenceSchema>
 /** Registered scoring models (decision-engine core/scoring MODELS). */
 export const MODELS = [
   { value: 'blend', label: 'Blend (context + sleeper proj)' },
+  { value: 'scratch', label: 'Scratch (homegrown, no sleeper)' },
   { value: 'gbt', label: 'GBT (boosted trees)' },
   { value: 'context', label: 'Context (regression)' },
   { value: 'naive', label: 'Naive baseline' },
