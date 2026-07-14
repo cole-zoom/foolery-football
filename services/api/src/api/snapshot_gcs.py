@@ -93,8 +93,15 @@ class GcsSnapshotReader:
             except NotFound:
                 blobs[name] = None
 
+        weeks, upcoming = _peek_weeks(manifest_bytes)
         names = [PLAYERS_NAME, PRIOR_SEASON_NAME, SCHEDULE_NAME]
-        names += [f"stats_week_{w}.json" for w in _peek_weeks(manifest_bytes)]
+        names += [f"stats_week_{w}.json" for w in weeks]
+        # Projections are optional per week (older snapshots lack them),
+        # but has_object() answers from the prefetched set — anything not
+        # listed here is invisible to assemble_snapshot, which silently
+        # degrades blend to context and disables the availability gate.
+        projection_weeks = sorted(set(weeks) | ({upcoming} if upcoming else set()))
+        names += [f"projections_week_{w}.json" for w in projection_weeks]
 
         try:
             with ThreadPoolExecutor(max_workers=_MAX_DOWNLOAD_WORKERS) as pool:
@@ -155,10 +162,11 @@ class GcsSnapshotReader:
         return str(generation)
 
 
-def _peek_weeks(manifest_bytes: bytes) -> list[int]:
-    """Week numbers from a raw manifest, tolerantly.
+def _peek_weeks(manifest_bytes: bytes) -> tuple[list[int], int | None]:
+    """(weeks_included, upcoming_week_projection) from a raw manifest, tolerantly.
 
-    Only used to know which ``stats_week_<W>.json`` blobs to prefetch —
+    Only used to know which ``stats_week_<W>.json`` /
+    ``projections_week_<W>.json`` blobs to prefetch —
     ``assemble_snapshot`` remains the real validator, so anything
     unparseable here just means "prefetch nothing extra" and the schema
     error surfaces there with its proper message.
@@ -166,7 +174,9 @@ def _peek_weeks(manifest_bytes: bytes) -> list[int]:
 
     try:
         manifest = json.loads(manifest_bytes)
-        weeks = manifest.get("weeks_included") or []
-        return [int(w) for w in weeks] if isinstance(weeks, list) else []
+        weeks_raw = manifest.get("weeks_included") or []
+        weeks = [int(w) for w in weeks_raw] if isinstance(weeks_raw, list) else []
+        upcoming = manifest.get("upcoming_week_projection")
+        return weeks, int(upcoming) if isinstance(upcoming, int) else None
     except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
-        return []
+        return [], None
