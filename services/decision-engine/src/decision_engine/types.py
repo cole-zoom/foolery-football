@@ -159,6 +159,9 @@ class SnapshotData(BaseModel):
     # the optional ``schedule.json`` artifact; empty for snapshots taken
     # before the loader learned to fetch the schedule.
     schedule: dict[int, dict[str, str]] = Field(default_factory=dict)
+    # week -> teams playing at home that week. Same source and caveats
+    # as ``schedule``; consumed by scoring features (home-field flag).
+    home_teams: dict[int, frozenset[str]] = Field(default_factory=dict)
     # Manifest ``snapshot_finished_at``, used as a cache-invalidation
     # token by consumers that memoise work derived from this snapshot
     # (e.g. the scoring-model build cache). None for legacy manifests.
