@@ -71,16 +71,6 @@ const PoolSchema = z.enum(['roster', 'waivers', 'both'])
 export type Pool = z.infer<typeof PoolSchema>
 export type Confidence = z.infer<typeof ConfidenceSchema>
 
-/** Registered scoring models (decision-engine core/scoring MODELS). */
-export const MODELS = [
-  { value: 'blend', label: 'Blend (context + sleeper proj)' },
-  { value: 'scratch', label: 'Scratch (homegrown, no sleeper)' },
-  { value: 'gbt', label: 'GBT (boosted trees)' },
-  { value: 'context', label: 'Context (regression)' },
-  { value: 'naive', label: 'Naive baseline' },
-] as const
-export type Model = (typeof MODELS)[number]['value']
-
 /** Availability-gate sources (decision-engine AvailabilityMode). Who
  * counts as startable, before any model scores anyone. */
 export const AVAILABILITY_MODES = [
@@ -269,7 +259,6 @@ export const api = {
     risk?: number
     pool?: Pool
     limit?: number
-    model?: Model
     availability?: Availability
     season?: number
     week?: number
@@ -281,7 +270,6 @@ export const api = {
     user: string
     risk?: number
     pool?: Pool
-    model?: Model
     availability?: Availability
     season?: number
     week?: number
@@ -296,7 +284,6 @@ export const api = {
     user: string
     risk?: number
     pool?: Pool
-    model?: Model
     availability?: Availability
     season?: number
     week?: number

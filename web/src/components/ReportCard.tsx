@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useQueries, useQueryClient } from '@tanstack/react-query'
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from 'recharts'
 import { Loader2 } from 'lucide-react'
-import { api, ApiError, MODELS, type Availability, type Comparison, type Model, type Pool } from '@/lib/api'
+import { api, ApiError, type Availability, type Pool } from '@/lib/api'
 import {
   Card,
   CardContent,
@@ -30,12 +30,12 @@ import {
 import { cn } from '@/lib/cn'
 
 /**
- * Season-long model bench: every scoring model's weekly lineup total
- * charted against what the manager actually fielded, plus the
+ * Season-long report card: the model's weekly lineup total charted
+ * against what the manager actually fielded, plus the
  * hindsight-perfect lineup as a benchmark.
  *
- * One /comparison call per (model, week), fetched through a 2-worker
- * pool (same reasoning as the /decisions prefetch: the API runs on a
+ * One /comparison call per week, fetched through a 2-worker pool
+ * (same reasoning as the /decisions prefetch: the API runs on a
  * single vCPU, so a fan-out would starve interactive requests). Query
  * keys match ComparisonView's exactly, so the two views share a cache.
  *
@@ -52,16 +52,11 @@ type SeriesDef = {
   label: string
   color: string
   dashed?: boolean
-  model?: Model
+  isModel?: boolean
 }
 
 const SERIES: SeriesDef[] = [
-  ...MODELS.map((m, i) => ({
-    key: m.value,
-    label: m.label,
-    color: ['#7c3aed', '#0284c7', '#d97706'][i] ?? '#db2777',
-    model: m.value,
-  })),
+  { key: 'model', label: 'Model (blend)', color: '#7c3aed', isModel: true },
   { key: 'you', label: 'You (actual lineup)', color: '#059669' },
   { key: 'perfect', label: 'Perfect (hindsight)', color: 'var(--color-ink-8)', dashed: true },
 ]
@@ -76,7 +71,7 @@ const STALE_MS = 5 * 60 * 1000
 
 const round1 = (n: number) => Math.round(n * 10) / 10
 
-export function ModelsDashboard({
+export function ReportCard({
   user,
   leagueId,
   season,
@@ -111,24 +106,17 @@ export function ModelsDashboard({
     [maxWeek],
   )
 
-  // Model-major order; results[mi * allWeeks.length + wi] below relies on it.
-  const combos = useMemo(
-    () => MODELS.flatMap((m) => allWeeks.map((week) => ({ model: m.value, week }))),
-    [allWeeks],
-  )
-
   // Disabled observers: they never fetch themselves, they just watch the
   // cache the worker pool fills. Key shape mirrors ComparisonView.
   const results = useQueries({
-    queries: combos.map((c) => ({
-      queryKey: ['comparison', leagueId, user, season, c.week, c.model, risk, pool, availability] as const,
+    queries: allWeeks.map((week) => ({
+      queryKey: ['comparison', leagueId, user, season, week, risk, pool, availability] as const,
       queryFn: () =>
         api.comparison({
           league_id: leagueId,
           user,
           season,
-          week: c.week,
-          model: c.model,
+          week,
           risk,
           pool,
           availability,
@@ -140,25 +128,21 @@ export function ModelsDashboard({
 
   useEffect(() => {
     if (maxWeek === 0) return
-    // Week-major queue so the chart grows a whole week at a time.
-    const queue: { model: Model; week: number }[] = []
-    for (let w = 1; w <= maxWeek; w++) {
-      for (const m of MODELS) queue.push({ model: m.value, week: w })
-    }
+    const queue: number[] = []
+    for (let w = 1; w <= maxWeek; w++) queue.push(w)
     let cancelled = false
     const worker = async () => {
       while (!cancelled) {
-        const c = queue.shift()
-        if (!c) return
+        const week = queue.shift()
+        if (week === undefined) return
         await queryClient.prefetchQuery({
-          queryKey: ['comparison', leagueId, user, season, c.week, c.model, risk, pool, availability],
+          queryKey: ['comparison', leagueId, user, season, week, risk, pool, availability],
           queryFn: () =>
             api.comparison({
               league_id: leagueId,
               user,
               season,
-              week: c.week,
-              model: c.model,
+              week,
               risk,
               pool,
               availability,
@@ -177,8 +161,9 @@ export function ModelsDashboard({
   }, [queryClient, leagueId, user, season, risk, pool, availability, maxWeek])
 
   const settled = results.filter((r) => r.isSuccess || r.isError).length
-  const loading = combos.length === 0 || settled < combos.length
-  const allFailed = combos.length > 0 && settled === combos.length && results.every((r) => r.isError)
+  const loading = allWeeks.length === 0 || settled < allWeeks.length
+  const allFailed =
+    allWeeks.length > 0 && settled === allWeeks.length && results.every((r) => r.isError)
   const firstError = results.find((r) => r.error)?.error as Error | undefined
 
   const selectedWeeks = useMemo(() => {
@@ -191,34 +176,28 @@ export function ModelsDashboard({
     const out: Array<Record<string, number | null>> = []
     for (const week of selectedWeeks) {
       const row: Record<string, number | null> = { week }
-      let human: Comparison['totals'] | null = null
-      let anySettled = false
-      MODELS.forEach((m, mi) => {
-        const q = results[mi * allWeeks.length + (week - 1)]
-        if (q?.isSuccess || q?.isError) anySettled = true
-        const t = q?.data?.totals ?? null
-        if (t && !human) human = t
-        row[m.value] = t
-          ? round1(metric === 'actual' ? t.model_actual : t.model_predicted)
-          : null
-      })
-      const h = human as Comparison['totals'] | null
-      row.you = h
+      const q = results[week - 1]
+      const settledWeek = q?.isSuccess || q?.isError
+      const t = q?.data?.totals ?? null
+      row.model = t
+        ? round1(metric === 'actual' ? t.model_actual : t.model_predicted)
+        : null
+      row.you = t
         ? metric === 'actual'
-          ? round1(h.human_actual)
-          : h.human_predicted !== null
-            ? round1(h.human_predicted)
+          ? round1(t.human_actual)
+          : t.human_predicted !== null
+            ? round1(t.human_predicted)
             : null
         : null
       row.perfect =
-        metric === 'actual' && h?.perfect_actual != null ? round1(h.perfect_actual) : null
-      // A week where every model settled with an error (400: no stats)
-      // isn't comparable — drop it rather than chart a hole.
+        metric === 'actual' && t?.perfect_actual != null ? round1(t.perfect_actual) : null
+      // A week that settled with an error (400: no stats) isn't
+      // comparable — drop it rather than chart a hole.
       const allNull = SERIES.every((s) => row[s.key] === null || s.key === 'perfect')
-      if (!(allNull && anySettled && !loading)) out.push(row)
+      if (!(allNull && settledWeek && !loading)) out.push(row)
     }
     return out
-  }, [selectedWeeks, results, allWeeks, metric, loading])
+  }, [selectedWeeks, results, metric, loading])
 
   // Perfect has no "predicted" reading — it only exists in hindsight.
   const activeSeries = SERIES.filter(
@@ -238,7 +217,7 @@ export function ModelsDashboard({
           total += v
           n += 1
           const you = row.you
-          if (s.model && you !== null && you !== undefined) {
+          if (s.isModel && you !== null && you !== undefined) {
             winnable += 1
             if (v > you + 0.05) wins += 1
           }
@@ -250,13 +229,13 @@ export function ModelsDashboard({
 
   const anyPriorSeason = results.some((r) => r.data?.using_prior_season)
 
-  if (stateQ.isLoading || (combos.length > 0 && settled === 0 && !allFailed)) {
+  if (stateQ.isLoading || (allWeeks.length > 0 && settled === 0 && !allFailed)) {
     return (
       <main className="flex-1 max-w-[1400px] mx-auto w-full px-8 py-10">
         <PageHeader season={season} pool={pool} risk={risk} />
-        <ProgressNote settled={settled} total={combos.length} />
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          {Array.from({ length: 5 }).map((_, i) => (
+        <ProgressNote settled={settled} total={allWeeks.length} />
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+          {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-[92px]" />
           ))}
         </div>
@@ -282,7 +261,7 @@ export function ModelsDashboard({
         </Card>
       )}
 
-      {loading && !allFailed && <ProgressNote settled={settled} total={combos.length} />}
+      {loading && !allFailed && <ProgressNote settled={settled} total={allWeeks.length} />}
 
       {/* Filter row: metric, then series visibility (doubles as the legend). */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 mb-4">
@@ -404,7 +383,7 @@ export function ModelsDashboard({
                 <div className="stamp text-[9px] text-ink-7 mt-1.5">
                   {avg !== null ? `${avg.toFixed(1)} AVG / WK · ${n} WKS` : 'NO DATA'}
                 </div>
-                {series.model && winnable > 0 && (
+                {series.isModel && winnable > 0 && (
                   <div className="stamp text-[9px] text-ink-8 mt-0.5">
                     BEAT YOU {wins}/{winnable} WKS
                   </div>
@@ -422,7 +401,7 @@ export function ModelsDashboard({
           </CardTitle>
           <CardDescription>
             {metric === 'actual'
-              ? 'Points each lineup really scored — models replayed leakage-safe, you as fielded on Sleeper.'
+              ? 'Points each lineup really scored — the model replayed leakage-safe, you as fielded on Sleeper.'
               : 'Points each side was projected to score before kickoff.'}
           </CardDescription>
         </CardHeader>
@@ -546,12 +525,12 @@ export function ModelsDashboard({
 function PageHeader({ season, pool, risk }: { season: number; pool: Pool; risk: number }) {
   return (
     <div className="mb-7">
-      <div className="stamp text-[10px] text-ink-7 mb-2">MODEL BENCH · FULL SEASON</div>
+      <div className="stamp text-[10px] text-ink-7 mb-2">REPORT CARD · FULL SEASON</div>
       <h2 className="display text-[36px] text-ink-12">
-        Every model, every week · <span className="text-[var(--color-signal)]">{season}</span>
+        The model vs you, every week · <span className="text-[var(--color-signal)]">{season}</span>
       </h2>
       <p className="text-ink-8 text-sm mt-2 max-w-lg leading-relaxed">
-        Weekly lineup totals for each scoring model (replayed leakage-safe at risk{' '}
+        The blend model's weekly lineup total (replayed leakage-safe at risk{' '}
         <span className="text-ink-11">{risk.toFixed(2)}</span>, pool{' '}
         <span className="text-ink-11">{pool}</span>) against what you actually fielded, with
         the hindsight-perfect lineup as the ceiling.
@@ -567,7 +546,7 @@ function ProgressNote({ settled, total }: { settled: number; total: number }) {
       <Loader2 size={14} className="animate-spin text-[var(--color-signal)]" />
       <span className="flex-1">
         <span className="stamp text-[10px] text-ink-7 mr-2">REPLAYING SEASON</span>
-        {settled} of {total} model-week runs scored — the chart fills in as they land.
+        {settled} of {total} weeks scored — the chart fills in as they land.
       </span>
       <span className="nums stamp text-[10px] text-ink-8">{pct}%</span>
     </div>

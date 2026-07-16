@@ -14,6 +14,7 @@ from ffdm_app import session as app_session
 from ffdm_app.types import AppRequest, LiveState
 
 from api import live_cache
+from api.config import PROD_MODEL
 from api.deps import (
     HttpClientDep,
     PrepareSeasonDep,
@@ -38,7 +39,6 @@ def decide(
     risk: float = Query(default=0.5, ge=0.0, le=1.0),
     pool: Pool = Query(default="roster"),
     limit: int = Query(default=20, ge=1, le=200),
-    model: str = Query(default="blend"),
     availability: Availability = Query(default="sleeper"),
     season: int | None = Query(default=None),
     week: int | None = Query(default=None),
@@ -64,7 +64,7 @@ def decide(
         risk=risk,
         pool=pool,
         limit=limit,
-        model=model,
+        model=PROD_MODEL,
         availability=availability,
         prefer_team=prefer_team.upper() if prefer_team else None,
         avoid_team=avoid_team.upper() if avoid_team else None,

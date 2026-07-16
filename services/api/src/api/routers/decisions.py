@@ -20,6 +20,7 @@ from fastapi import APIRouter, Query
 from ffdm_app.types import LiveState
 
 from api import live_cache
+from api.config import PROD_MODEL
 from api.deps import (
     HttpClientDep,
     PrepareSeasonDep,
@@ -56,7 +57,6 @@ def get_decisions(
     settings: SettingsDep,
     risk: float = Query(default=0.5, ge=0.0, le=1.0),
     pool: Pool = Query(default="roster"),
-    model: str = Query(default="blend"),
     availability: Availability = Query(default="sleeper"),
     season: int | None = Query(default=None),
     week: int | None = Query(default=None),
@@ -117,7 +117,7 @@ def get_decisions(
             risk=risk,
             pool=cast(Pool, pool),
             limit=CANDIDATE_SEARCH_LIMIT,
-            model=model,
+            model=PROD_MODEL,
             prefer_team=prefer,
             avoid_team=avoid,
             state_override=state_override,

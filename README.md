@@ -17,10 +17,10 @@ username and league to try it (e.g. user `ben`).
 Two properties make this a decision *support* system rather than a
 scheduled script and an emailed ranking:
 
-- **The user's judgement is load-bearing.** Risk appetite, model choice,
-  candidate pool, team preferences, and per-slot overrides ("I'm
-  starting my guy regardless") all change the recommended lineup at
-  request time. The model can't learn these — they live in the user's
+- **The user's judgement is load-bearing.** Risk appetite, injury-gate
+  strictness, candidate pool, team preferences, and per-slot overrides
+  ("I'm starting my guy regardless") all change the recommended lineup
+  at request time. The model can't learn these — they live in the user's
   head — so the system exposes them as live controls.
 - **The data never sits still.** New stats land weekly, injuries and
   roster moves land daily, and every league scores differently. The
@@ -79,16 +79,34 @@ Full details: [`ARCHITECTURE.md`](ARCHITECTURE.md) and
 
 ## Models
 
-Scoring models are plug-and-play: a model is one module in
-`services/decision-engine/src/decision_engine/core/scoring/` exposing a
-`build(snapshot) -> ScoreFn` factory, registered in one line in
-`MODELS`. The CLI (`--model`) and API (`?model=`) select by name with no
-pipeline edits.
+Production serves exactly **one** scoring model: `blend`. Its mean is
+Sleeper's stat-level weekly projection scored under *the requesting
+league's own rules*; its spread (what the risk slider moves) is the
+player's own weekly variability from history; an availability gate
+benches players who won't play. On a 99-league replay of the 2025
+season it out-pointed 79 of 99 real managers, by +76 points per season
+on average (87.6% lineup efficiency vs the humans' 84.9%) — see
+`evals/`.
 
-| Model | What it does |
-| -- | -- |
-| `naive` | Rolling mean of recent weekly points; sample stddev as spread. The permanent control — every new model must beat it in backtest. |
-| `context` | Per-position ridge regression (RB/WR/TE) over naive's mean/stddev **plus** target volume and target-share trend. QB/K/DEF fall back to naive until their own features land. |
+Blend was *chosen*, not assumed. Scoring models are plug-and-play — one
+module in `services/decision-engine/src/decision_engine/core/scoring/`
+exposing a `build(snapshot) -> ScoreFn` factory, registered in one line
+in `MODELS` — and the registry keeps the full evaluation ladder that
+blend beat:
+
+| Model | Role today | What it does |
+| -- | -- | -- |
+| `blend` | **production** | Sleeper's weekly projection as the mean, our per-player spread and confidence around it. |
+| `naive` | baseline | Rolling mean of recent weekly points; sample stddev as spread. The permanent control. |
+| `context` | baseline | Per-position ridge regression (RB/WR/TE) over usage features; QB/K/DEF fall back to naive. |
+| `gbt` | baseline | Gradient-boosted trees over 18 features; never meaningfully beat the ridge. |
+| `scratch` | baseline | Fully Sleeper-free rebuild (form, opportunity volume, opponent strength); ties the average human. |
+
+The baselines stay runnable from the engine CLI (`decide --model`) and
+the eval harness (`evals/run_eval.py`) so the selection evidence is
+reproducible, but the API and web app are deliberately pinned to
+`blend` (`PROD_MODEL` in `services/api/src/api/config.py`) — there is
+no model knob in production.
 
 Design decisions worth knowing:
 
@@ -107,15 +125,16 @@ Design decisions worth knowing:
 - **Bye weeks are filtered structurally, not predicted.** The season
   schedule ships in every snapshot, so any player whose team has no
   game in the target week is dropped from the candidate pool before
-  scoring — live weeks and replays alike. Injury scratches remain the
-  models' blind spot; the schedule can't see those.
+  scoring — live weeks and replays alike. Injury scratches are handled
+  by the availability gate (the INJURY GATE knob): sources range from
+  Sleeper's own signal (default) through the free official injury
+  report to a played-last-game heuristic, or off.
 - **Ship gate.** `scripts/backtest-models.py` replays a season
   week-by-week (each week predicted from strictly-prior data) and
-  compares models on MAE, startable-player MAE, and top-K precision.
-  On the 2025 replay the context model improves startable-player MAE at
-  every regressed position (e.g. TE 6.18 → 5.76 PPR points); its known
-  trade-off is worse MAE on deep-bench players that never enter a
-  lineup decision.
+  compares models on MAE, startable-player MAE, and top-K precision;
+  `evals/run_eval.py` replays whole seasons against real managers'
+  actual lineups. A model becomes the production default only by
+  beating the incumbent on that replay — that is how `blend` won.
 
 ```bash
 uv run --project services/decision-engine \
@@ -130,9 +149,10 @@ recommended lineup — none is cosmetic:
 - **Risk slider** — shifts every score along its uncertainty; cautious
   managers get high-floor lineups, trailing managers get high-ceiling
   ones.
-- **Model picker** — context regression vs. naive baseline, re-scored
-  live. The two models genuinely disagree (different WR1/FLEX picks),
-  and the UI shows which.
+- **Injury gate** — who counts as *startable* before anyone is scored:
+  Sleeper's availability signal (default), the free official injury
+  report, a played-last-game heuristic, or off. Flipping it re-solves
+  the lineup and shows what the news is worth.
 - **Week & season pickers** — replay any historical week; the model
   sees only data available before that week.
 - **Candidate pool** — roster only, waivers only, or both (turns the
@@ -151,6 +171,10 @@ recommended lineup — none is cosmetic:
   pool knob: with waivers in play it shows what the model could have
   fielded off that week's wire — free agency judged by the week-W
   matchup rosters, not today's.
+- **Season report card view** — the model's weekly lineup total charted
+  against yours for every completed week of the season, with the
+  hindsight-perfect lineup as the ceiling; the same trust-builder as
+  the hindsight view, zoomed out to the full year.
 
 Decision-tied readouts: each slot shows **MATCH** (your starter is
 already optimal) or **SWAP +N** (projected points gained by benching

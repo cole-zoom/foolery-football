@@ -31,7 +31,9 @@ class AppRequest:
     risk: float = 0.5
     pool: str = "roster"
     limit: int = 10
-    model: str = "naive"
+    # Production's pinned model; other registry names remain reachable
+    # for eval/dev tooling that constructs its own AppRequest.
+    model: str = "blend"
     # Availability-gate source (decision_engine.types.AvailabilityMode).
     availability: str = "sleeper"
     prefer_team: str | None = None

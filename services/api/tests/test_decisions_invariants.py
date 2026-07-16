@@ -206,37 +206,24 @@ def test_prefer_team_is_case_normalised(make_client) -> None:
     assert boosted_total >= plain_total
 
 
-def test_model_param_reaches_pipeline(make_client) -> None:
-    """``?model=context`` must select the context scoring model.
+def test_model_param_is_ignored(make_client) -> None:
+    """Production serves exactly one scoring model (``PROD_MODEL``).
 
-    The fixture snapshot is tiny, so context falls back to naive means —
-    but its notes carry the "context:" tag, proving the param routed.
+    The ``model`` query param no longer exists, so even a nonsense value
+    is silently ignored and the response matches the plain request —
+    there is no way to steer the API off the pinned model.
     """
 
     http, snaps = _basic_setup()
     client = make_client(http=http, snapshots=snaps)
-    body = client.get(
-        "/leagues/L1/decisions",
-        params={"user": "cole", "season": 2026, "week": 3, "pool": "roster",
-                "model": "context"},
-    ).json()
-    recs = [d["recommended"] for d in body["decisions"] if d["recommended"]]
-    assert recs
-    assert all(
-        any(note.startswith("context:") for note in r["score"]["notes"]) for r in recs
+    base_params = {"user": "cole", "season": 2026, "week": 3, "pool": "roster"}
+    plain = client.get("/leagues/L1/decisions", params=base_params)
+    steered = client.get(
+        "/leagues/L1/decisions", params={**base_params, "model": "clairvoyant"}
     )
-
-
-def test_unknown_model_is_a_400(make_client) -> None:
-    http, snaps = _basic_setup()
-    client = make_client(http=http, snapshots=snaps)
-    resp = client.get(
-        "/leagues/L1/decisions",
-        params={"user": "cole", "season": 2026, "week": 3, "pool": "roster",
-                "model": "clairvoyant"},
-    )
-    assert resp.status_code == 400
-    assert "unknown scoring model" in resp.json()["error"]
+    assert plain.status_code == 200
+    assert steered.status_code == 200
+    assert steered.json() == plain.json()
 
 
 def test_swap_includes_current_starter_score(make_client) -> None:

@@ -21,6 +21,7 @@ from fastapi import APIRouter, Query
 from ffdm_app.types import LiveState
 
 from api import live_cache
+from api.config import PROD_MODEL
 from api.deps import (
     HttpClientDep,
     PrepareSeasonDep,
@@ -55,7 +56,6 @@ def get_comparison(
     settings: SettingsDep,
     risk: float = Query(default=0.5, ge=0.0, le=1.0),
     pool: Pool = Query(default="roster"),
-    model: str = Query(default="blend"),
     availability: Availability = Query(default="sleeper"),
     season: int | None = Query(default=None),
     week: int | None = Query(default=None),
@@ -102,7 +102,7 @@ def get_comparison(
         matchups=matchups,
         season=resolved_season,
         week=resolved_week,
-        model=model,
+        model=PROD_MODEL,
         risk=risk,
         pool=pool,
         candidate_limit=CANDIDATE_SEARCH_LIMIT,
@@ -151,7 +151,7 @@ def get_comparison(
     return ComparisonOut(
         season=resolved_season,
         week=resolved_week,
-        model=model,
+        model=PROD_MODEL,
         risk=risk,
         pool=pool,
         slots=slots_out,
