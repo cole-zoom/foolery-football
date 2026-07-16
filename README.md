@@ -162,17 +162,21 @@ or its honest fallback reason) plus a confidence tier.
 ## Running locally
 
 Prereqs: Python 3.13+, [uv](https://docs.astral.sh/uv/), Node 20+ with
-pnpm. No API keys needed — Sleeper's API is public.
+pnpm. No API keys and no Sleeper account needed — Sleeper's API is
+public, and the examples below use a real public league
+(`footballguys` / "The Party League", 2025).
 
 ```bash
-# 1. Snapshot data (or reuse data/seasons/ if already populated).
+# 1. Snapshot data. In the offseason pin the last completed season;
+#    during the season a bare `stats-loader update` snapshots the live one.
 cd services/stats-loader && uv sync --all-extras
-uv run stats-loader update
+uv run stats-loader update --season 2025 --week 18
 
-# 2a. CLI: ranked candidates for one slot.
+# 2a. CLI: ranked candidates for one slot. --season/--week replay a
+#     completed week; omit both during the season for the live week.
 cd ../decision-engine && uv sync --all-extras
-uv run decide --user <sleeper_username> --league <league_id> \
-              --slot FLEX --risk 0.3 --model context
+uv run decide --user footballguys --league 1182163805001936896 \
+              --slot FLEX --risk 0.3 --season 2025 --week 10
 
 # 2b. Or the full stack: API + web.
 cd ../api && uv sync --all-extras
@@ -181,6 +185,12 @@ uv run ffdm-api                     # http://127.0.0.1:8000, local snapshots
 cd ../../web && pnpm install
 pnpm dev                            # http://localhost:5173, proxies /api
 ```
+
+In the web form, enter username `footballguys` and pick "The Party
+League" from the dropdown the form fills in. The API downloads any
+missing season snapshot on first request (the bare `decide` CLI does
+not — hence step 1). Tip: replay week 10 rather than 18 — week 18
+rosters are thinned by resting starters.
 
 Tests and lint (same commands CI runs per service):
 
