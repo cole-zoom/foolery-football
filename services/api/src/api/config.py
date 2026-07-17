@@ -11,6 +11,11 @@ from typing import Literal
 
 DEFAULT_SLEEPER_BASE_URL = "https://api.sleeper.app"
 
+# The one scoring model production serves. The engine registry keeps
+# the other models for the eval harness (evals/) and the CLI; the API
+# deliberately exposes no way to select them.
+PROD_MODEL = "blend"
+
 SnapshotBackend = Literal["fs", "gcs"]
 
 

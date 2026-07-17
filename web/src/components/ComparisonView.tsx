@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Loader2, Swords, TrendingUp } from 'lucide-react'
-import { api, ApiError, type Availability, type Comparison, type ComparisonPlayer, type Model, type Pool } from '@/lib/api'
+import { api, ApiError, type Availability, type Comparison, type ComparisonPlayer, type Pool } from '@/lib/api'
 import { PlayerAvatar } from '@/components/PlayerAvatar'
 import { PositionChip } from '@/components/PositionChip'
 import { cn } from '@/lib/cn'
@@ -33,7 +33,6 @@ export function ComparisonView({
   leagueId,
   season,
   week,
-  model,
   risk,
   pool,
   availability,
@@ -43,7 +42,6 @@ export function ComparisonView({
   leagueId: string
   season: number
   week: number | null
-  model: Model
   risk: number
   pool: Pool
   availability: Availability
@@ -51,14 +49,13 @@ export function ComparisonView({
 }) {
   const q = useQuery({
     enabled: week !== null,
-    queryKey: ['comparison', leagueId, user, season, week, model, risk, pool, availability],
+    queryKey: ['comparison', leagueId, user, season, week, risk, pool, availability],
     queryFn: () =>
       api.comparison({
         league_id: leagueId,
         user,
         season,
         week: week ?? undefined,
-        model,
         risk,
         pool,
         availability,
@@ -78,7 +75,7 @@ export function ComparisonView({
             Week <span className="text-[var(--color-signal)]">{week ?? '—'}</span> · {season}
           </h2>
           <p className="text-ink-8 text-sm mt-2 max-w-md leading-relaxed">
-            What the <span className="text-ink-11">{model}</span> model would have started
+            What the <span className="text-ink-11">blend</span> model would have started
             (seeing only weeks before this one, picking from{' '}
             <span className="text-ink-11">{POOL_PHRASE[pool]}</span>) versus what you
             actually fielded — both scored by what really happened.

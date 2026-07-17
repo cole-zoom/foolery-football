@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChartLine, Database, LayoutDashboard, Loader2, RotateCcw, Swords, TrendingUp } from 'lucide-react'
-import { api, AVAILABILITY_MODES, MODELS, type Availability, type Candidate, type Model, type Pool, type SlotDecision } from '@/lib/api'
+import { api, AVAILABILITY_MODES, type Availability, type Candidate, type Pool, type SlotDecision } from '@/lib/api'
 import { ComparisonView } from '@/components/ComparisonView'
-import { ModelsDashboard } from '@/components/ModelsDashboard'
+import { ReportCard } from '@/components/ReportCard'
 import { EntryForm } from '@/components/EntryForm'
 import { FieldSelect } from '@/components/FieldSelect'
 import { RiskKnob } from '@/components/RiskKnob'
@@ -23,7 +23,7 @@ type Session = {
 }
 
 type PinnedPick = { player: Candidate['player']; score: number }
-type View = 'lineup' | 'comparison' | 'models'
+type View = 'lineup' | 'comparison' | 'report'
 
 const REGULAR_SEASON_LAST_WEEK = 18
 const RISK_DEBOUNCE_MS = 400
@@ -34,7 +34,6 @@ export default function App() {
   const [openPlayerId, setOpenPlayerId] = useState<string | null>(null)
   const [risk, setRisk] = useState(0.5)
   const [pool, setPool] = useState<Pool>('roster')
-  const [model, setModel] = useState<Model>('blend')
   const [availability, setAvailability] = useState<Availability>('sleeper')
   const [week, setWeek] = useState<number | null>(null)
   const [prefer, setPrefer] = useState<string | null>(null)
@@ -67,8 +66,6 @@ export default function App() {
       setRisk={setRisk}
       pool={pool}
       setPool={setPool}
-      model={model}
-      setModel={setModel}
       availability={availability}
       setAvailability={setAvailability}
       week={week}
@@ -96,8 +93,6 @@ function SessionView({
   setRisk,
   pool,
   setPool,
-  model,
-  setModel,
   availability,
   setAvailability,
   week,
@@ -121,8 +116,6 @@ function SessionView({
   setRisk: (n: number) => void
   pool: Pool
   setPool: (p: Pool) => void
-  model: Model
-  setModel: (m: Model) => void
   availability: Availability
   setAvailability: (a: Availability) => void
   week: number | null
@@ -193,7 +186,6 @@ function SessionView({
       week,
       debouncedRisk,
       pool,
-      model,
       availability,
       prefer,
       avoid,
@@ -204,7 +196,6 @@ function SessionView({
         user: session.username,
         risk: debouncedRisk,
         pool,
-        model,
         availability,
         season: session.season,
         week: week ?? undefined,
@@ -259,7 +250,6 @@ function SessionView({
             w,
             debouncedRisk,
             pool,
-            model,
             availability,
             prefer,
             avoid,
@@ -270,7 +260,6 @@ function SessionView({
               user: session.username,
               risk: debouncedRisk,
               pool,
-              model,
               availability,
               season: session.season,
               week: w,
@@ -297,7 +286,6 @@ function SessionView({
     week,
     debouncedRisk,
     pool,
-    model,
     availability,
     prefer,
     avoid,
@@ -401,10 +389,10 @@ function SessionView({
                 label="MODEL VS YOU"
               />
               <ViewTab
-                active={view === 'models'}
-                onClick={() => setView('models')}
+                active={view === 'report'}
+                onClick={() => setView('report')}
                 icon={<ChartLine size={11} />}
-                label="MODEL BENCH"
+                label="REPORT CARD"
               />
             </div>
           </div>
@@ -418,7 +406,7 @@ function SessionView({
               }}
               options={seasonOptions}
             />
-            {view !== 'models' && (
+            {view !== 'report' && (
               <WeekPicker
                 value={week ?? 1}
                 onChange={(w) => {
@@ -442,19 +430,6 @@ function SessionView({
               size="sm"
               triggerClassName="min-w-[150px]"
             />
-            {view !== 'models' && (
-              <FieldSelect
-                label="MODEL"
-                value={model}
-                onChange={(v) => {
-                  setModel(v as Model)
-                  setPins({})
-                }}
-                options={MODELS.map((m) => ({ value: m.value, label: m.label }))}
-                size="sm"
-                triggerClassName="min-w-[170px]"
-              />
-            )}
             <FieldSelect
               label="INJURY GATE"
               value={availability}
@@ -495,8 +470,8 @@ function SessionView({
       </header>
 
       {/* Main */}
-      {view === 'models' ? (
-        <ModelsDashboard
+      {view === 'report' ? (
+        <ReportCard
           user={session.username}
           leagueId={session.leagueId}
           season={session.season}
@@ -510,7 +485,6 @@ function SessionView({
           leagueId={session.leagueId}
           season={session.season}
           week={week}
-          model={model}
           risk={debouncedRisk}
           pool={pool}
           availability={availability}
@@ -527,7 +501,7 @@ function SessionView({
               </h2>
               <p className="text-ink-8 text-sm mt-2 max-w-md leading-relaxed">
                 Top recommendation per slot from the{' '}
-                <span className="text-ink-11">{model}</span> model at{' '}
+                <span className="text-ink-11">blend</span> model at{' '}
                 <span className="text-ink-11">risk {debouncedRisk.toFixed(2)}</span>.
                 Click a slot for the full ranked list.
                 {pinnedCount > 0 && (
@@ -650,7 +624,7 @@ function SessionView({
             <ol className="space-y-3 text-sm text-ink-10 leading-relaxed">
               <li className="flex gap-3">
                 <span className="stamp text-[10px] text-[var(--color-signal)] shrink-0 pt-0.5">01</span>
-                <span>The lineup updates as you move the risk slider or switch the scoring model. Each slot shows the model's top pick; <span className="text-ink-12 font-medium">SWAP +N</span> is the projected points gained by benching your current starter for it.</span>
+                <span>The lineup updates as you move the risk slider or change the injury gate. Each slot shows the model's top pick; <span className="text-ink-12 font-medium">SWAP +N</span> is the projected points gained by benching your current starter for it.</span>
               </li>
               <li className="flex gap-3">
                 <span className="stamp text-[10px] text-[var(--color-signal)] shrink-0 pt-0.5">02</span>
@@ -686,7 +660,6 @@ function SessionView({
         slotId={activeSlotId}
         risk={debouncedRisk}
         pool={pool}
-        model={model}
         availability={availability}
         onPoolChange={setPool}
         pinnedPlayerId={activeSlotId ? (pins[activeSlotId]?.player.player_id ?? null) : null}
