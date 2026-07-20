@@ -1,5 +1,8 @@
 """Context scoring model — naive's skeleton with a learned mean.
 
+Display name: "Opportunity Forecast" (it trusts a player's workload —
+target volume and target-share trend — over raw scoring history).
+
 Design brief: ``docs/pdfs/Proposed Scoring Model.pdf``. The naive
 model's flat rolling mean is replaced by a per-position ridge
 regression whose inputs are naive's own mean/variance *plus* target

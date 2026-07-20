@@ -166,7 +166,7 @@ export function RecommendationPanel({
         <div className="px-7 py-4 border-t hairline flex items-center justify-between stamp text-[10px] text-ink-7">
           <span>SCORED {q.data.candidates.length} CANDIDATES</span>
           <span>
-            WK {q.data.week} · {q.data.season} · RISK {q.data.risk.toFixed(2)} · BLEND
+            WK {q.data.week} · {q.data.season} · RISK {q.data.risk.toFixed(2)} · PROJECTION FORECAST
           </span>
         </div>
       )}

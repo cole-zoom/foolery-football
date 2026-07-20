@@ -33,6 +33,26 @@ MODELS: Final[dict[str, ScoreModelFactory]] = {
     "scratch": scratch.build,
 }
 
+# Human-readable names for user-facing surfaces (CLI output, docs, the
+# slide deck). The dict keys above stay the stable internal identifiers —
+# they're wired through the CLI, API, eval harness, cached build keys and
+# ~hundreds of frozen eval-result files, so they never change. This map is
+# the single source of truth for the display label; keep it in lockstep
+# with the deck.
+DISPLAY_NAMES: Final[dict[str, str]] = {
+    "naive": "Recent Average",
+    "context": "Opportunity Forecast",
+    "gbt": "Signal Forecast",
+    "blend": "Projection Forecast",
+    "scratch": "Homegrown Forecast",
+}
+
+
+def display_name(name: str) -> str:
+    """Display label for a registered model key; the key itself if unmapped."""
+
+    return DISPLAY_NAMES.get(name, name)
+
 # (model, snapshot_dir, season, snapshot_version, weeks_included).
 # weeks_included is in the key because the pipeline trims the snapshot
 # per requested week — each replay week is its own build.
@@ -91,10 +111,12 @@ def build_score_fn(name: str, snapshot: SnapshotData) -> ScoreFn:
 
 
 __all__ = [
+    "DISPLAY_NAMES",
     "MODELS",
     "ScoreFn",
     "ScoreModelFactory",
     "UnknownModelError",
     "build_score_fn",
+    "display_name",
     "get_model",
 ]

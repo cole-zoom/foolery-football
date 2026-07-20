@@ -1,5 +1,7 @@
 """GBT scoring model — the full regression-spec feature set on boosted trees.
 
+Display name: "Signal Forecast" (every available signal — 18 features).
+
 Implements the "Sleeper Fantasy Football Regression Model Specification":
 one gradient-boosted tree regressor per position (QB/RB/WR/TE), trained
 walk-forward over the snapshot with every rolling feature shifted by one

@@ -61,19 +61,27 @@ def score_player(
 ) -> PlayerScore: ...
 ```
 
-The naive v1 implementation lives in `core.scoring.naive`. Swapping
-in a smarter model means adding a sibling module and selecting
-between them via a config flag — no edits to `core/pipeline.py` or
-the CLI. Registered today: `naive`, `context` (ridge regression),
-`gbt` (boosted trees), `scratch` (Sleeper-free rebuild — milestone 4),
-`blend` (Sleeper's week-W projection as the mean, context's spread —
-[PRD 3.2](../product-specs/milestone-3/3.2-blend-model.md)).
+The Recent Average v1 implementation lives in `core.scoring.naive`.
+Swapping in a smarter model means adding a sibling module and selecting
+between them via a config flag — no edits to `core/pipeline.py` or the
+CLI. Each model has a display name and a stable registry **key** (the
+identifier used everywhere in code); the canonical map is `DISPLAY_NAMES`
+in `core/scoring/__init__.py`. Registered today:
 
-Production is pinned to `blend`: the API no longer accepts a `?model=`
-param (`PROD_MODEL` in `services/api/src/api/config.py`) and the web
-app has no model picker. The rest of the registry is the evaluation
-ladder — reachable via the engine CLI's `--model` and `evals/` so the
-selection evidence stays reproducible.
+| Display name | Key | Method |
+| -- | -- | -- |
+| Recent Average | `naive` | rolling mean |
+| Opportunity Forecast | `context` | ridge regression over usage |
+| Signal Forecast | `gbt` | boosted trees, 18 features |
+| Homegrown Forecast | `scratch` | Sleeper-free rebuild (milestone 4) |
+| Projection Forecast | `blend` | Sleeper's week-W projection as the mean, history's spread ([PRD 3.2](../product-specs/milestone-3/3.2-blend-model.md)) |
+
+Production is pinned to Projection Forecast (`blend`): the API no longer
+accepts a `?model=` param (`PROD_MODEL` in
+`services/api/src/api/config.py`) and the web app has no model picker.
+The rest of the registry is the evaluation ladder — reachable via the
+engine CLI's `--model <key>` and `evals/` so the selection evidence
+stays reproducible.
 
 Multi-slot lineups (the `/decisions` router and week replays) assign
 players to slots optimally over predicted points via the bitmask DP in

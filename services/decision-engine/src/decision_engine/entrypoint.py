@@ -33,7 +33,7 @@ from decision_engine.core import pipeline
 from decision_engine.core.eligibility import UnsupportedSlotError
 from decision_engine.core.league_fetch import UserInputError
 from decision_engine.core.pipeline import DecideRequest, DecideResult
-from decision_engine.core.scoring import UnknownModelError
+from decision_engine.core.scoring import UnknownModelError, display_name
 from decision_engine.providers.sleeper import SchemaError
 from decision_engine.types import NflState, Pool, ScoredCandidate
 
@@ -69,7 +69,12 @@ def decide(
     week: int | None = typer.Option(
         None, "--week", help="Override /v1/state/nfl week (requires --season)."
     ),
-    model: str = typer.Option(DEFAULT_MODEL, "--model", help="Scoring model name."),
+    model: str = typer.Option(
+        DEFAULT_MODEL,
+        "--model",
+        help="Scoring model registry key: naive | context | gbt | scratch | "
+        "blend (production, = 'Projection Forecast'). See DISPLAY_NAMES.",
+    ),
     snapshot_root: Path | None = typer.Option(
         None, "--snapshot-root", help="Override data/seasons/ root."
     ),
@@ -187,7 +192,8 @@ def _render(result: DecideResult) -> None:
         f'League:   "{league.name}" ({league.league_id}), '
         f"scoring: {scoring_summary} (rec={rec_weight:.1f})\n"
         f"User:     {user.username or req.user} (user_id {user.user_id})\n"
-        f"Slot:     {req.slot}  Risk: {req.risk:.2f}  Pool: {req.pool}  Model: {req.model}\n"
+        f"Slot:     {req.slot}  Risk: {req.risk:.2f}  Pool: {req.pool}  "
+        f"Model: {display_name(req.model)} ({req.model})\n"
         "\n"
     )
 

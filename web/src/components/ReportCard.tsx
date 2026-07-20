@@ -56,7 +56,7 @@ type SeriesDef = {
 }
 
 const SERIES: SeriesDef[] = [
-  { key: 'model', label: 'Model (blend)', color: '#7c3aed', isModel: true },
+  { key: 'model', label: 'Projection Forecast', color: '#7c3aed', isModel: true },
   { key: 'you', label: 'You (actual lineup)', color: '#059669' },
   { key: 'perfect', label: 'Perfect (hindsight)', color: 'var(--color-ink-8)', dashed: true },
 ]
@@ -530,7 +530,7 @@ function PageHeader({ season, pool, risk }: { season: number; pool: Pool; risk: 
         The model vs you, every week · <span className="text-[var(--color-signal)]">{season}</span>
       </h2>
       <p className="text-ink-8 text-sm mt-2 max-w-lg leading-relaxed">
-        The blend model's weekly lineup total (replayed leakage-safe at risk{' '}
+        The Projection Forecast model's weekly lineup total (replayed leakage-safe at risk{' '}
         <span className="text-ink-11">{risk.toFixed(2)}</span>, pool{' '}
         <span className="text-ink-11">{pool}</span>) against what you actually fielded, with
         the hindsight-perfect lineup as the ceiling.

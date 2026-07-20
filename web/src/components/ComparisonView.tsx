@@ -75,7 +75,7 @@ export function ComparisonView({
             Week <span className="text-[var(--color-signal)]">{week ?? '—'}</span> · {season}
           </h2>
           <p className="text-ink-8 text-sm mt-2 max-w-md leading-relaxed">
-            What the <span className="text-ink-11">blend</span> model would have started
+            What the <span className="text-ink-11">Projection Forecast</span> model would have started
             (seeing only weeks before this one, picking from{' '}
             <span className="text-ink-11">{POOL_PHRASE[pool]}</span>) versus what you
             actually fielded — both scored by what really happened.

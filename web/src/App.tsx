@@ -501,7 +501,7 @@ function SessionView({
               </h2>
               <p className="text-ink-8 text-sm mt-2 max-w-md leading-relaxed">
                 Top recommendation per slot from the{' '}
-                <span className="text-ink-11">blend</span> model at{' '}
+                <span className="text-ink-11">Projection Forecast</span> model at{' '}
                 <span className="text-ink-11">risk {debouncedRisk.toFixed(2)}</span>.
                 Click a slot for the full ranked list.
                 {pinnedCount > 0 && (

@@ -1,4 +1,4 @@
-"""Naive baseline scoring model — PRD 2.2.
+"""Naive baseline scoring model — PRD 2.2. Display name: "Recent Average".
 
 Deliberately simple. The buddies who actually understand fantasy will
 swap it for something better; this exists to be the floor they beat.

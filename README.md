@@ -79,34 +79,39 @@ Full details: [`ARCHITECTURE.md`](ARCHITECTURE.md) and
 
 ## Models
 
-Production serves exactly **one** scoring model: `blend`. Its mean is
-Sleeper's stat-level weekly projection scored under *the requesting
-league's own rules*; its spread (what the risk slider moves) is the
-player's own weekly variability from history; an availability gate
-benches players who won't play. On a 99-league replay of the 2025
-season it out-pointed 79 of 99 real managers, by +76 points per season
-on average (87.6% lineup efficiency vs the humans' 84.9%) — see
-`evals/`.
+Production serves exactly **one** scoring model: **Projection Forecast**
+(registry key `blend`). Its mean is Sleeper's stat-level weekly
+projection scored under *the requesting league's own rules*; its spread
+(what the risk slider moves) is the player's own weekly variability from
+history; an availability gate benches players who won't play. On a
+99-league replay of the 2025 season it out-pointed 79 of 99 real
+managers, by +76 points per season on average (87.6% lineup efficiency
+vs the humans' 84.9%) — see `evals/`.
 
-Blend was *chosen*, not assumed. Scoring models are plug-and-play — one
-module in `services/decision-engine/src/decision_engine/core/scoring/`
-exposing a `build(snapshot) -> ScoreFn` factory, registered in one line
-in `MODELS` — and the registry keeps the full evaluation ladder that
-blend beat:
+Each model has a display name (used in the app, the CLI, and the slide
+deck) and a short registry **key** — the stable identifier wired through
+the CLI, API, eval harness, and cached results, which never changes. The
+canonical map is `DISPLAY_NAMES` in
+`services/decision-engine/src/decision_engine/core/scoring/__init__.py`.
 
-| Model | Role today | What it does |
-| -- | -- | -- |
-| `blend` | **production** | Sleeper's weekly projection as the mean, our per-player spread and confidence around it. |
-| `naive` | baseline | Rolling mean of recent weekly points; sample stddev as spread. The permanent control. |
-| `context` | baseline | Per-position ridge regression (RB/WR/TE) over usage features; QB/K/DEF fall back to naive. |
-| `gbt` | baseline | Gradient-boosted trees over 18 features; never meaningfully beat the ridge. |
-| `scratch` | baseline | Fully Sleeper-free rebuild (form, opportunity volume, opponent strength); ties the average human. |
+Projection Forecast was *chosen*, not assumed. Scoring models are
+plug-and-play — one module exposing a `build(snapshot) -> ScoreFn`
+factory, registered in one line in `MODELS` — and the registry keeps the
+full evaluation ladder it beat:
 
-The baselines stay runnable from the engine CLI (`decide --model`) and
-the eval harness (`evals/run_eval.py`) so the selection evidence is
+| Model | Key | Role today | What it does |
+| -- | -- | -- | -- |
+| **Projection Forecast** | `blend` | **production** | Sleeper's weekly projection as the mean, our per-player spread and confidence around it. |
+| **Recent Average** | `naive` | baseline | Rolling mean of recent weekly points; sample stddev as spread. The permanent control. |
+| **Opportunity Forecast** | `context` | baseline | Per-position ridge regression (RB/WR/TE) over usage features; QB/K/DEF fall back to Recent Average. |
+| **Signal Forecast** | `gbt` | baseline | Gradient-boosted trees over 18 features; never meaningfully beat the ridge. |
+| **Homegrown Forecast** | `scratch` | baseline | Fully Sleeper-free rebuild (form, opportunity volume, opponent strength); ties the average human. |
+
+The baselines stay runnable from the engine CLI (`decide --model <key>`)
+and the eval harness (`evals/run_eval.py`) so the selection evidence is
 reproducible, but the API and web app are deliberately pinned to
-`blend` (`PROD_MODEL` in `services/api/src/api/config.py`) — there is
-no model knob in production.
+Projection Forecast (`PROD_MODEL` in
+`services/api/src/api/config.py`) — there is no model knob in production.
 
 Design decisions worth knowing:
 
@@ -134,7 +139,8 @@ Design decisions worth knowing:
   compares models on MAE, startable-player MAE, and top-K precision;
   `evals/run_eval.py` replays whole seasons against real managers'
   actual lineups. A model becomes the production default only by
-  beating the incumbent on that replay — that is how `blend` won.
+  beating the incumbent on that replay — that is how Projection Forecast
+  (`blend`) won.
 
 ```bash
 uv run --project services/decision-engine \
@@ -236,7 +242,7 @@ cd web && pnpm build                                 # typecheck + build
 - **Model updates:** models refit in-process from whatever snapshot they
   are handed, so a data refresh *is* the retrain. Code changes to models
   ship through the normal PR → CI → Cloud Run deploy path, gated on the
-  backtest beating `naive`.
+  backtest beating Recent Average (`naive`).
 - **Footprint:** one Cloud Run service, one GCS bucket, one Vercel
   project. No databases, no schedulers, no GPU — the heaviest compute is
   a closed-form regression fit measured in milliseconds.

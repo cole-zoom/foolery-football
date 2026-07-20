@@ -1,5 +1,7 @@
 """Blend scoring model — Sleeper's weekly projection, context's spread.
 
+Display name: "Projection Forecast" (the production model).
+
 PRD 3.2, resolved by its own acceptance clause. The PRD proposed
 ``mean = w * history + (1 - w) * projection`` with ``w = n / (n + k)``,
 tuned on the 2024 backtest. The tuning verdict was unambiguous: every
