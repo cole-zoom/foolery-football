@@ -105,7 +105,6 @@ full evaluation ladder it beat:
 | **Recent Average** | `naive` | baseline | Rolling mean of recent weekly points; sample stddev as spread. The permanent control. |
 | **Opportunity Forecast** | `context` | baseline | Per-position ridge regression (RB/WR/TE) over usage features; QB/K/DEF fall back to Recent Average. |
 | **Signal Forecast** | `gbt` | baseline | Gradient-boosted trees over 18 features; never meaningfully beat the ridge. |
-| **Homegrown Forecast** | `scratch` | baseline | Fully Sleeper-free rebuild (form, opportunity volume, opponent strength); ties the average human. |
 
 The baselines stay runnable from the engine CLI (`decide --model <key>`)
 and the eval harness (`evals/run_eval.py`) so the selection evidence is

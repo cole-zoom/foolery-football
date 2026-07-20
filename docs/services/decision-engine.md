@@ -73,7 +73,6 @@ in `core/scoring/__init__.py`. Registered today:
 | Recent Average | `naive` | rolling mean |
 | Opportunity Forecast | `context` | ridge regression over usage |
 | Signal Forecast | `gbt` | boosted trees, 18 features |
-| Homegrown Forecast | `scratch` | Sleeper-free rebuild (milestone 4) |
 | Projection Forecast | `blend` | Sleeper's week-W projection as the mean, history's spread ([PRD 3.2](../product-specs/milestone-3/3.2-blend-model.md)) |
 
 Production is pinned to Projection Forecast (`blend`): the API no longer

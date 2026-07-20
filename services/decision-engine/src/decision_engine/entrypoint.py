@@ -72,8 +72,8 @@ def decide(
     model: str = typer.Option(
         DEFAULT_MODEL,
         "--model",
-        help="Scoring model registry key: naive | context | gbt | scratch | "
-        "blend (production, = 'Projection Forecast'). See DISPLAY_NAMES.",
+        help="Scoring model registry key: naive | context | gbt | blend "
+        "(production, = 'Projection Forecast'). See DISPLAY_NAMES.",
     ),
     snapshot_root: Path | None = typer.Option(
         None, "--snapshot-root", help="Override data/seasons/ root."

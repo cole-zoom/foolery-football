@@ -44,7 +44,8 @@ DISPLAY_NAMES: Final[dict[str, str]] = {
     "context": "Opportunity Forecast",
     "gbt": "Signal Forecast",
     "blend": "Projection Forecast",
-    "scratch": "Homegrown Forecast",
+    # scratch stays a registry key for the eval harness but is intentionally
+    # undocumented (a shelved experiment); display_name() falls back to the key.
 }
 
 

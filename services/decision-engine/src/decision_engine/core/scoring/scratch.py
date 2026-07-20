@@ -1,8 +1,5 @@
 """Scratch scoring model — a sleeperless blend (milestone 4 PRD).
 
-Display name: "Homegrown Forecast" (built entirely from our own archive,
-no Sleeper projection).
-
 Everything is built from our own archive: box scores and the season
 schedule. No field of ``weekly_projections`` is read here. The model is
 context's skeleton (walk-forward training in the factory, lazy
