@@ -8,7 +8,7 @@ import { Combobox } from './Combobox'
 // One-click demo login for graders. Loads the Footballguys account and its
 // party league so a TA doesn't need a Sleeper account to see the app work.
 const DEMO_USERNAME = 'footballguys'
-const DEMO_LEAGUE_ID = '936896'
+const DEMO_LEAGUE_ID = '1182163805001936896'
 
 /**
  * Cold-start screen. Three required fields: username, league ID, season.
