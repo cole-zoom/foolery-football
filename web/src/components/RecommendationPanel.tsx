@@ -22,6 +22,7 @@ export function RecommendationPanel({
   pool,
   availability,
   onPoolChange,
+  disabledPlayerIds,
   pinnedPlayerId,
   onPin,
   onUnpin,
@@ -38,6 +39,8 @@ export function RecommendationPanel({
   pool: Pool
   availability: Availability
   onPoolChange: (p: Pool) => void
+  // Players already starting in another slot — can't be pinned here.
+  disabledPlayerIds: Set<string>
   pinnedPlayerId: string | null
   onPin: (c: Candidate) => void
   onUnpin: () => void
@@ -156,6 +159,7 @@ export function RecommendationPanel({
             candidate={c}
             index={i}
             pinned={pinnedPlayerId === c.player.player_id}
+            disabled={disabledPlayerIds.has(c.player.player_id)}
             onUse={() => onPin(c)}
             onView={() => onViewPlayer(c.player.player_id)}
           />

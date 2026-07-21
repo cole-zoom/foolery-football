@@ -14,16 +14,21 @@ import { PlayerAvatar } from './PlayerAvatar'
  * Two actions:
  * - Use (pins this player to the active slot)
  * - View (opens the player detail drawer)
+ *
+ * ``disabled`` marks a player who is already starting in another slot:
+ * the Use action is blocked so the same player can't fill two slots.
  */
 export function CandidateRow({
   candidate,
   pinned,
+  disabled = false,
   onUse,
   onView,
   index = 0,
 }: {
   candidate: Candidate
   pinned: boolean
+  disabled?: boolean
   onUse: () => void
   onView: () => void
   index?: number
@@ -38,6 +43,7 @@ export function CandidateRow({
           'group relative w-full rise-in',
           'rounded-lg overflow-hidden bg-ink-2 border border-[var(--color-signal)]/40',
           'signal-glow p-5',
+          disabled && 'opacity-60',
         )}
         style={{ animationDelay: `${index * 60}ms` }}
       >
@@ -68,6 +74,12 @@ export function CandidateRow({
                   <span className="stamp text-[10px] text-ink-9">ON ROSTER</span>
                 </>
               )}
+              {disabled && (
+                <>
+                  <span className="text-ink-7 text-[10px]">·</span>
+                  <span className="stamp text-[10px] text-ink-7">STARTING ELSEWHERE</span>
+                </>
+              )}
             </div>
 
             <div className="grid grid-cols-3 gap-6 mt-4">
@@ -92,8 +104,10 @@ export function CandidateRow({
         </div>
 
         <div className="mt-5 pt-4 border-t hairline flex items-center gap-2">
-          <ActionButton primary onClick={onUse} active={pinned}>
-            {pinned ? (
+          <ActionButton primary onClick={onUse} active={pinned} disabled={disabled}>
+            {disabled ? (
+              'ALREADY IN LINEUP'
+            ) : pinned ? (
               <>
                 <Check size={11} strokeWidth={2.5} />
                 PINNED
@@ -118,6 +132,7 @@ export function CandidateRow({
         'flex items-center gap-3 px-4 py-3 rounded-md',
         'bg-ink-2 border hairline transition hover:bg-ink-3',
         pinned && 'ring-1 ring-[var(--color-good)]/40 bg-ink-3',
+        disabled && 'opacity-60',
       )}
       style={{ animationDelay: `${index * 50}ms` }}
     >
@@ -146,6 +161,12 @@ export function CandidateRow({
               <span className="stamp text-[9px] text-[var(--color-good)]">PINNED</span>
             </>
           )}
+          {disabled && (
+            <>
+              <span className="text-ink-7 text-[9px]">·</span>
+              <span className="stamp text-[9px] text-ink-7">IN LINEUP</span>
+            </>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-3 shrink-0">
@@ -156,8 +177,10 @@ export function CandidateRow({
           <span className="stamp text-[8px] text-ink-7 mt-1">SCORE</span>
         </div>
         <ConfidenceDot confidence={score.confidence} />
-        <ActionButton small primary={!pinned} active={pinned} onClick={onUse}>
-          {pinned ? (
+        <ActionButton small primary={!pinned && !disabled} active={pinned} disabled={disabled} onClick={onUse}>
+          {disabled ? (
+            'IN LINEUP'
+          ) : pinned ? (
             <>
               <Check size={10} strokeWidth={2.5} />
               PINNED
@@ -200,24 +223,29 @@ function ActionButton({
   primary = false,
   active = false,
   small = false,
+  disabled = false,
 }: {
   children: React.ReactNode
   onClick: () => void
   primary?: boolean
   active?: boolean
   small?: boolean
+  disabled?: boolean
 }) {
   return (
     <button
       onClick={onClick}
+      disabled={disabled}
       className={cn(
-        'stamp inline-flex items-center justify-center gap-1.5 rounded-md transition cursor-pointer',
+        'stamp inline-flex items-center justify-center gap-1.5 rounded-md transition',
         small ? 'h-7 px-2.5 text-[9px]' : 'h-9 px-3.5 text-[10px]',
-        primary && !active &&
+        disabled && 'bg-ink-2 text-ink-7 border hairline cursor-not-allowed',
+        !disabled && 'cursor-pointer',
+        !disabled && primary && !active &&
           'bg-[var(--color-signal)] text-white hover:brightness-110',
-        primary && active &&
+        !disabled && primary && active &&
           'bg-[var(--color-good)] text-white',
-        !primary &&
+        !disabled && !primary &&
           'bg-ink-3 text-ink-11 hover:bg-ink-4',
       )}
     >
