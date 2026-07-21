@@ -301,6 +301,23 @@ function SessionView({
     return m
   }, [decisionsQ.data])
 
+  // Players already occupying another starting slot — the model's pick
+  // there, or a pin. The /decide drawer ranks each slot's candidates in
+  // isolation, so without this a player recommended (or pinned) at one
+  // slot would still be pinnable into a second, starting the same player
+  // twice. Excludes the active slot so its own current pick stays usable.
+  const usedElsewhere = useMemo(() => {
+    const ids = new Set<string>()
+    if (!ctx) return ids
+    for (const s of ctx.slots) {
+      if (!s.selectable || s.slot_id === activeSlotId) continue
+      const eff =
+        pins[s.slot_id]?.player ?? decisionsByPos.get(s.slot_id)?.recommended?.player
+      if (eff) ids.add(eff.player_id)
+    }
+    return ids
+  }, [ctx, activeSlotId, pins, decisionsByPos])
+
   // Show a "caching snapshot" banner the first time we load a given
   // (league, season) — that's when the backend may need ~15-30s to
   // download the season's snapshot from Sleeper.
@@ -644,6 +661,7 @@ function SessionView({
         pool={pool}
         availability={availability}
         onPoolChange={setPool}
+        disabledPlayerIds={usedElsewhere}
         pinnedPlayerId={activeSlotId ? (pins[activeSlotId]?.player.player_id ?? null) : null}
         onPin={(c) => {
           if (!activeSlotId) return
