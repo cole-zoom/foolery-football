@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowRight, Loader2 } from 'lucide-react'
+import { ArrowRight, GraduationCap, Loader2 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/cn'
 import { Combobox } from './Combobox'
+
+// One-click demo login for graders. Loads the Footballguys account and its
+// party league so a TA doesn't need a Sleeper account to see the app work.
+const DEMO_USERNAME = 'footballguys'
+const DEMO_LEAGUE_ID = '936896'
 
 /**
  * Cold-start screen. Three required fields: username, league ID, season.
@@ -73,6 +78,13 @@ export function EntryForm({
     onSubmit({ username: u, leagueId: lid, season })
   }
 
+  // Skip the form entirely and load the Footballguys demo league.
+  function loadDemo() {
+    setError(null)
+    setBusy(true)
+    onSubmit({ username: DEMO_USERNAME, leagueId: DEMO_LEAGUE_ID, season })
+  }
+
   return (
     <div className="relative min-h-screen flex items-center justify-center p-8">
       <div
@@ -93,10 +105,36 @@ export function EntryForm({
           <br />
           because of <span className="text-[var(--color-signal)]">Sleeper</span>.
         </h1>
-        <p className="text-ink-8 text-base mb-11 max-w-md">
+        <p className="text-ink-8 text-base mb-8 max-w-md">
           Sleeper rosters, weekly projections, and a variance-adjusted
           recommendation for every slot.
         </p>
+
+        <button
+          onClick={loadDemo}
+          disabled={busy}
+          className={cn(
+            'group mb-8 w-full flex items-center justify-between gap-3 px-5 py-3.5 rounded-md transition text-left',
+            'bg-ink-2 border hairline hover:bg-ink-3 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed',
+          )}
+        >
+          <span className="flex items-center gap-3">
+            <span className="grid place-items-center w-8 h-8 rounded-md bg-ink-3 border hairline shrink-0">
+              <GraduationCap size={15} className="text-[var(--color-signal)]" />
+            </span>
+            <span className="flex flex-col leading-tight">
+              <span className="stamp text-[11px] text-ink-12">FOR TAs / INSTRUCTORS</span>
+              <span className="text-[12px] text-ink-8">
+                One-click load of the Footballguys demo league
+              </span>
+            </span>
+          </span>
+          {busy ? (
+            <Loader2 size={14} className="animate-spin text-ink-8 shrink-0" />
+          ) : (
+            <ArrowRight size={14} className="text-ink-8 group-hover:translate-x-0.5 transition shrink-0" />
+          )}
+        </button>
 
         <div className="space-y-5">
           <Field label="SLEEPER USERNAME">
