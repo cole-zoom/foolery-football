@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChartLine, Database, LayoutDashboard, Loader2, RotateCcw, Swords, TrendingUp } from 'lucide-react'
+import { ChartLine, Database, LayoutDashboard, Loader2, RotateCcw, TrendingUp } from 'lucide-react'
 import { api, AVAILABILITY_MODES, type Availability, type Candidate, type Pool, type SlotDecision } from '@/lib/api'
-import { ComparisonView } from '@/components/ComparisonView'
 import { ReportCard } from '@/components/ReportCard'
 import { EntryForm } from '@/components/EntryForm'
 import { FieldSelect } from '@/components/FieldSelect'
@@ -23,7 +22,7 @@ type Session = {
 }
 
 type PinnedPick = { player: Candidate['player']; score: number }
-type View = 'lineup' | 'comparison' | 'report'
+type View = 'lineup' | 'report'
 
 const REGULAR_SEASON_LAST_WEEK = 18
 const RISK_DEBOUNCE_MS = 400
@@ -364,29 +363,23 @@ function SessionView({
     <div className="min-h-screen flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-30 backdrop-blur-md bg-[var(--color-ink-base)]/85 border-b hairline">
-        <div className="max-w-[1400px] mx-auto px-8 py-3.5 flex items-center justify-between gap-6">
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="w-8 h-8 rounded-md bg-ink-3 border hairline grid place-items-center">
+        <div className="max-w-[1400px] mx-auto pl-3 pr-4 sm:px-6 xl:px-8 py-3.5 flex items-center justify-between gap-3 xl:gap-6">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="w-8 h-8 rounded-md bg-ink-3 border hairline grid place-items-center shrink-0">
               <LayoutDashboard size={14} className="text-[var(--color-signal)]" />
             </div>
-            <div className="flex flex-col leading-tight">
+            <div className="hidden md:flex flex-col leading-tight">
               <span className="stamp text-[10px] text-ink-7">FOOTBALL GENIE</span>
               <span className="text-sm text-ink-12 font-medium truncate max-w-[220px]">
                 {ctx?.league.name ?? '…'}
               </span>
             </div>
-            <div className="flex items-center rounded-md border hairline bg-ink-2 p-0.5 ml-3">
+            <div className="flex items-center rounded-md border hairline bg-ink-2 p-0.5 md:ml-3">
               <ViewTab
                 active={view === 'lineup'}
                 onClick={() => setView('lineup')}
                 icon={<LayoutDashboard size={11} />}
                 label="LINEUP"
-              />
-              <ViewTab
-                active={view === 'comparison'}
-                onClick={() => setView('comparison')}
-                icon={<Swords size={11} />}
-                label="MODEL VS YOU"
               />
               <ViewTab
                 active={view === 'report'}
@@ -478,17 +471,6 @@ function SessionView({
           risk={debouncedRisk}
           pool={pool}
           availability={availability}
-        />
-      ) : view === 'comparison' ? (
-        <ComparisonView
-          user={session.username}
-          leagueId={session.leagueId}
-          season={session.season}
-          week={week}
-          risk={debouncedRisk}
-          pool={pool}
-          availability={availability}
-          onViewPlayer={setOpenPlayerId}
         />
       ) : (
       <main className="flex-1 max-w-[1400px] mx-auto w-full px-8 py-10 grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-10">
